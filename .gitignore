@@ -1,0 +1,22 @@
+# バイナリファイル（ビルド成果物）
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+.env
+
+# 一時ファイルやエディタ/IDEファイル
+*.log
+*.tmp
+*.swp
+*.swo
+.DS_Store
+.vscode/
+.idea/
+
+# OS依存のファイル
+Thumbs.db
+ehthumbs.db
