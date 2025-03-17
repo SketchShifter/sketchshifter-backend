@@ -1,8 +1,8 @@
-# sketchshifter-backend(バックエンド)
+# sketchshifter_backend(バックエンド)
 ```bash
 # リポジトリのクローン
-git clone https://github.com/SketchShifter/sketchshifter-backend.git
-cd SketchShifter/sketchshifter-backend.git
+git clone https://github.com/SketchShifter/sketchshifter_backend.git
+cd SketchShifter/sketchshifter_backend.git
 
 # 依存パッケージのインストール
 go mod tidy
@@ -33,8 +33,8 @@ Go言語とGinフレームワークを使用したProcessing作品共有プラ�
 
 ```bash
 # リポジトリのクローン
-git clone https://github.com/yourusername/processing-share-platform-backend.git
-cd processing-share-platform-backend
+git clone https://github.com/SketchShifter/sketchshifter_backend.git
+cd SketchShifter/sketchshifter_backend.git
 
 # 依存パッケージのインストール
 go mod tidy
