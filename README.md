@@ -12,9 +12,12 @@ cd github.com/SketchShifter/sketchshifter_backend/
 
 # 依存パッケージのインストール
 go mod tidy
+go mod download
 
-# 開発用サーバー起動
-go run cmd/app/main.go
+# ビルド
+make build
+make run
+make migrate-up
 ```
 
 Processingで作成した作品を共有・閲覧するためのプラットフォームのバックエンドAPIです。
