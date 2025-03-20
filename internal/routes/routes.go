@@ -1,69 +1,110 @@
 package routes
 
 import (
-	"github.com/gin-gonic/gin"
+	"github.com/SketchShifter/sketchshifter_backend/internal/config"
 	"github.com/SketchShifter/sketchshifter_backend/internal/controllers"
 	"github.com/SketchShifter/sketchshifter_backend/internal/middlewares"
+	"github.com/SketchShifter/sketchshifter_backend/internal/repository"
+	"github.com/SketchShifter/sketchshifter_backend/internal/services"
+	"github.com/SketchShifter/sketchshifter_backend/internal/utils"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
-// SetupRoutes はルーティングを設定する
-func SetupRoutes(r *gin.Engine) {
-	// CORSミドルウェアの設定
-	r.Use(middlewares.CORS())
+// SetupRouter ルーターを設定
+func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
+	// Ginルーターを作成
+	r := gin.Default()
 
-	// APIグループ
-	api := r.Group("/api")
+	// ミドルウェアを設定
+	r.Use(middlewares.ErrorMiddleware())
+	r.Use(middlewares.CORSMiddleware())
+
+	// 静的ファイルを提供
+	r.Static("/uploads", cfg.Storage.UploadDir)
+
+	// リポジトリを作成
+	userRepo := repository.NewUserRepository(db)
+	workRepo := repository.NewWorkRepository(db)
+	tagRepo := repository.NewTagRepository(db)
+	commentRepo := repository.NewCommentRepository(db)
+
+	// ユーティリティを作成
+	fileUtils := utils.NewFileUtils("/uploads")
+
+	// サービスを作成
+	authService := services.NewAuthService(userRepo, cfg)
+	workService := services.NewWorkService(workRepo, tagRepo, cfg, fileUtils)
+	tagService := services.NewTagService(tagRepo)
+	commentService := services.NewCommentService(commentRepo, workRepo)
+	userService := services.NewUserService(userRepo, workRepo)
+
+	// コントローラーを作成
+	authController := controllers.NewAuthController(authService)
+	workController := controllers.NewWorkController(workService)
+	tagController := controllers.NewTagController(tagService)
+	commentController := controllers.NewCommentController(commentService)
+	userController := controllers.NewUserController(userService)
+
+	// 認証ミドルウェア
+	authMiddleware := middlewares.AuthMiddleware(authService)
+	optionalAuthMiddleware := middlewares.OptionalAuthMiddleware(authService)
+
+	// APIグループを作成
+	api := r.Group("/api/v1")
 	{
-		// 認証エンドポイント
+		// 認証ルート
 		auth := api.Group("/auth")
 		{
-			auth.POST("/register", controllers.Register)
-			auth.POST("/login", controllers.Login)
-			auth.GET("/me", middlewares.AuthRequired(), controllers.GetCurrentUser)
+			auth.POST("/register", authController.Register)
+			auth.POST("/login", authController.Login)
+			auth.POST("/oauth", authController.OAuth)
+			auth.GET("/me", authMiddleware, authController.GetMe)
+			auth.PUT("/password", authMiddleware, authController.ChangePassword)
 		}
 
-		// 作品エンドポイント
+		// 作品ルート
 		works := api.Group("/works")
 		{
-			works.GET("", controllers.GetWorks)
-			works.GET("/:id", controllers.GetWork)
-			works.POST("", middlewares.AuthRequired(), controllers.CreateWork)
-			works.PUT("/:id", middlewares.AuthRequired(), controllers.UpdateWork)
-			works.DELETE("/:id", middlewares.AuthRequired(), controllers.DeleteWork)
-			works.POST("/preview", controllers.PreviewWork)
-			
-			// いいね
-			works.POST("/:id/like", middlewares.AuthRequired(), controllers.LikeWork)
-			works.DELETE("/:id/like", middlewares.AuthRequired(), controllers.UnlikeWork)
-			
-			// お気に入り
-			works.POST("/:id/favorite", middlewares.AuthRequired(), controllers.FavoriteWork)
-			works.DELETE("/:id/favorite", middlewares.AuthRequired(), controllers.UnfavoriteWork)
-			
-			// コメント
-			works.GET("/:id/comments", controllers.GetWorkComments)
-			works.POST("/:id/comments", controllers.CreateComment)
+			// 認証不要
+			works.GET("", optionalAuthMiddleware, workController.List)
+			works.GET("/:id", optionalAuthMiddleware, workController.GetByID)
+			works.POST("/preview", workController.CreatePreview)
+
+			// コメント関連
+			works.GET("/:id/comments", commentController.List)
+			works.POST("/:id/comments", optionalAuthMiddleware, commentController.Create)
+
+			// 認証が必要
+			works.POST("", authMiddleware, workController.Create)
+			works.PUT("/:id", authMiddleware, workController.Update)
+			works.DELETE("/:id", authMiddleware, workController.Delete)
+			works.POST("/:id/like", authMiddleware, workController.AddLike)
+			works.DELETE("/:id/like", authMiddleware, workController.RemoveLike)
 		}
 
-		// コメント管理
+		// コメントルート
 		comments := api.Group("/comments")
 		{
-			comments.PUT("/:id", middlewares.AuthRequired(), controllers.UpdateComment)
-			comments.DELETE("/:id", middlewares.AuthRequired(), controllers.DeleteComment)
+			comments.PUT("/:id", authMiddleware, commentController.Update)
+			comments.DELETE("/:id", authMiddleware, commentController.Delete)
 		}
 
-		// タグ
-		tags := api.Group("/tags")
-		{
-			tags.GET("", controllers.GetTags)
-		}
+		// タグルート
+		api.GET("/tags", tagController.List)
 
-		// ユーザー
+		// ユーザールート
 		users := api.Group("/users")
 		{
-			users.GET("/favorites", middlewares.AuthRequired(), controllers.GetUserFavorites)
-			users.GET("/:id", controllers.GetUser)
-			users.GET("/:id/works", controllers.GetUserWorks)
+			users.GET("/:id", userController.GetByID)
+			users.GET("/:id/works", userController.GetUserWorks)
+			users.GET("/favorites", authMiddleware, userController.GetUserFavorites)
+			users.GET("/me", authMiddleware, userController.GetMe)
+			users.PUT("/me", authMiddleware, userController.UpdateProfile)
+			users.GET("/me/works", authMiddleware, userController.GetMyWorks)
 		}
 	}
+
+	return r
 }

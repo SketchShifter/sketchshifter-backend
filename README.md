@@ -7,8 +7,8 @@
 
 ```bash
 # リポジトリのクローン
-git clone https://github.com/SketchShifter/sketchshifter_backend.git
-cd sketchshifter_backend
+git clone https://github.com/SketchShifter/github.com/SketchShifter/sketchshifter_backend/.git
+cd github.com/SketchShifter/sketchshifter_backend/
 
 # 依存パッケージのインストール
 go mod tidy

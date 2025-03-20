@@ -1,7 +1,11 @@
+version: '3.8'
+
 services:
   api:
-    build: .
-    container_name: processing-api
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: processing-api-dev
     restart: always
     ports:
       - "8080:8080"
@@ -16,10 +20,8 @@ services:
       - TOKEN_EXPIRY=24
       - UPLOAD_DIR=/app/uploads
       - MAX_UPLOAD_SIZE=50
-      - GIN_MODE=debug
     volumes:
-      - ./uploads:/app/uploads
-      - .:/app
+      - ./:/app
     depends_on:
       - db
     networks:
@@ -27,7 +29,7 @@ services:
 
   db:
     image: mariadb:10.6
-    container_name: processing-db
+    container_name: processing-db-dev
     restart: always
     ports:
       - "3306:3306"
@@ -37,14 +39,14 @@ services:
       - MYSQL_USER=processing_user
       - MYSQL_PASSWORD=processing_password
     volumes:
-      - db_data:/var/lib/mysql
+      - db_data_dev:/var/lib/mysql
     networks:
       - processing_network
 
-  # PHPMyAdminを追加
+  # PHPMyAdminを追加（オプション）
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
-    container_name: phpmyadmin
+    container_name: phpmyadmin-dev
     ports:
       - "8081:80"
     environment:
@@ -61,4 +63,4 @@ networks:
     driver: bridge
 
 volumes:
-  db_data:
+  db_data_dev:

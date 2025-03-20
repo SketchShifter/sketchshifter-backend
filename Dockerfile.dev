@@ -1,0 +1,37 @@
+FROM golang:1.18-alpine
+
+# 依存関係のためのパッケージをインストール
+RUN apk add --no-cache gcc musl-dev
+
+# air（ホットリロード）をインストール
+RUN go install github.com/air-verse/air@latest
+
+# 作業ディレクトリを設定
+WORKDIR /app
+
+# Go Modulesのキャッシュレイヤーを作成
+COPY go.mod go.sum ./
+RUN go mod download
+
+# ソースコードをコピー
+COPY . .
+
+# アップロードディレクトリを作成
+RUN mkdir -p /app/uploads
+
+# airの設定ファイルを作成
+RUN echo ' \
+[build] \n\
+  cmd = "go build -o ./tmp/app ./cmd/app" \n\
+  bin = "./tmp/app" \n\
+  include_ext = ["go"] \n\
+  exclude_dir = ["uploads", "tmp"] \n\
+[misc] \n\
+  clean_on_exit = true \n\
+' > .air.toml
+
+# ポートを公開
+EXPOSE 8080
+
+# Airを使ってホットリロードで実行
+CMD ["air", "-c", ".air.toml"]

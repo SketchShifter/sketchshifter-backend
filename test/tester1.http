@@ -1,0 +1,35 @@
+@base_url = http://localhost:8080
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJleHAiOjE3NDI1NTM5ODQsImlhdCI6MTc0MjQ2NzU4NH0.Ug-Tag8GBlPqedWodzsAT2GuccCzsyVWW2o3CaDx-BA
+
+### GET Request
+GET {{base_url}}/api/v1/works
+
+### GET Request with query parameter
+GET {{base_url}}/api/v1/works?name=John
+
+### POST Request
+POST {{base_url}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "name": "John Brown",
+  "email": "john.brown@example.com",
+  "password": "password",
+  "nickname": "nyaaaaa"
+}
+
+### POST Request
+POST {{base_url}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "john.brown@example.com",
+  "password": "password"
+}
+
+### GET Request
+GET {{base_url}}/api/v1/auth/me
+Authorization: Bearer {{token}}
+
+
+

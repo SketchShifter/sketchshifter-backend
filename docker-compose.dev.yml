@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   api:
     build: .
@@ -16,9 +18,9 @@ services:
       - TOKEN_EXPIRY=24
       - UPLOAD_DIR=/app/uploads
       - MAX_UPLOAD_SIZE=50
-      - GIN_MODE=debug
     volumes:
       - ./uploads:/app/uploads
+      # ホットリロード用にソースコードをマウント
       - .:/app
     depends_on:
       - db
@@ -41,7 +43,7 @@ services:
     networks:
       - processing_network
 
-  # PHPMyAdminを追加
+  # PHPMyAdminを追加（オプション）
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
     container_name: phpmyadmin
