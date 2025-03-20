@@ -33,7 +33,7 @@ jobs:
           sudo ./aws/install --update
           aws --version
 
-      # AWS CLIにキーを設定をする
+      # AWS CLIにキーを設定する
       - name: AWS set Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
