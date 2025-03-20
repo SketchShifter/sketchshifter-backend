@@ -7,7 +7,7 @@
 
 ```bash
 # リポジトリのクローン
-git clone https://github.com/SketchShifter/sketchshifter_backend/.git
+git clone https://github.com/SketchShifter/sketchshifter_backend.git
 cd github.com/SketchShifter/sketchshifter_backend/
 
 # 依存パッケージのインストール
