@@ -46,10 +46,14 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	tagController := controllers.NewTagController(tagService)
 	commentController := controllers.NewCommentController(commentService)
 	userController := controllers.NewUserController(userService)
+	healthController := controllers.NewHealthController()
 
 	// 認証ミドルウェア
 	authMiddleware := middlewares.AuthMiddleware(authService)
 	optionalAuthMiddleware := middlewares.OptionalAuthMiddleware(authService)
+
+	// ヘルスチェックエンドポイント（認証不要）
+	r.GET("/api/v1/health", healthController.Check)
 
 	// APIグループを作成
 	api := r.Group("/api/v1")
@@ -61,7 +65,8 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 			auth.POST("/login", authController.Login)
 			auth.POST("/oauth", authController.OAuth)
 			auth.GET("/me", authMiddleware, authController.GetMe)
-			auth.PUT("/password", authMiddleware, authController.ChangePassword)
+			// 新規追加したエンドポイント
+			auth.POST("/change-password", authMiddleware, authController.ChangePassword)
 		}
 
 		// 作品ルート
@@ -100,8 +105,10 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 			users.GET("/:id", userController.GetByID)
 			users.GET("/:id/works", userController.GetUserWorks)
 			users.GET("/favorites", authMiddleware, userController.GetUserFavorites)
+			
+			// 新規追加したエンドポイント
 			users.GET("/me", authMiddleware, userController.GetMe)
-			users.PUT("/me", authMiddleware, userController.UpdateProfile)
+			users.PUT("/profile", authMiddleware, userController.UpdateProfile)
 			users.GET("/me/works", authMiddleware, userController.GetMyWorks)
 		}
 	}

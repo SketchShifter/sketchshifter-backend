@@ -1,11 +1,13 @@
-// main.go の修正
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/SketchShifter/sketchshifter_backend/internal/config"
+	"github.com/SketchShifter/sketchshifter_backend/internal/models"
 	"github.com/SketchShifter/sketchshifter_backend/internal/routes"
 	"github.com/gin-gonic/gin"
 )
@@ -22,10 +24,19 @@ func main() {
 		log.Fatalf("設定の読み込みに失敗しました: %v", err)
 	}
 
+	// コマンドライン引数をチェック
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		// マイグレーションモードで実行
+		handleMigration(cfg, os.Args[2:])
+		return
+	}
+
 	// Gin モードの設定（環境変数が設定されていない場合はデバッグモード）
 	ginMode := os.Getenv("GIN_MODE")
 	if ginMode == "" {
 		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(ginMode)
 	}
 
 	// カスタムログフォーマットを設定
@@ -51,40 +62,61 @@ func main() {
 	router := routes.SetupRouter(cfg, db)
 
 	// サーバー起動
-	log.Printf("サーバーを開始しています... PORT: %s", cfg.Server.Port)
+	log.Printf("サーバーを開始しています... PORT: %s, MODE: %s", cfg.Server.Port, gin.Mode())
 	if err := router.Run(":" + cfg.Server.Port); err != nil {
 		log.Fatalf("サーバーの起動に失敗しました: %v", err)
 	}
 }
 
-// package main
+// マイグレーション処理を実行
+func handleMigration(cfg *config.Config, args []string) {
+	if len(args) == 0 {
+		log.Fatal("使用方法: app migrate [up|down]")
+	}
 
-// import (
-// 	"log"
+	command := args[0]
 
-// 	"github.com/SketchShifter/sketchshifter_backend/internal/config"
-// 	"github.com/SketchShifter/sketchshifter_backend/internal/routes"
-// )
+	// データベース接続
+	db, err := config.InitDB(cfg)
+	if err != nil {
+		log.Fatalf("データベース接続に失敗しました: %v", err)
+	}
 
-// func main() {
-// 	// 設定をロード
-// 	cfg, err := config.Load()
-// 	if err != nil {
-// 		log.Fatalf("設定の読み込みに失敗しました: %v", err)
-// 	}
+	switch strings.ToLower(command) {
+	case "up":
+		// マイグレーションを実行
+		fmt.Println("マイグレーションを実行中...")
+		err = db.AutoMigrate(
+			&models.User{},
+			&models.ExternalAccount{},
+			&models.Tag{},
+			&models.Work{},
+			&models.Like{},
+			&models.Comment{},
+		)
+		if err != nil {
+			log.Fatalf("マイグレーションに失敗しました: %v", err)
+		}
+		fmt.Println("マイグレーションが成功しました")
 
-// 	// データベース接続
-// 	db, err := config.InitDB(cfg)
-// 	if err != nil {
-// 		log.Fatalf("データベース接続に失敗しました: %v", err)
-// 	}
+	case "down":
+		// テーブルを削除（逆順）
+		fmt.Println("マイグレーションをロールバック中...")
+		err = db.Migrator().DropTable(
+			&models.Comment{},
+			&models.Like{},
+			"work_tags",
+			&models.Work{},
+			&models.Tag{},
+			&models.ExternalAccount{},
+			&models.User{},
+		)
+		if err != nil {
+			log.Fatalf("テーブル削除に失敗しました: %v", err)
+		}
+		fmt.Println("テーブルの削除が成功しました")
 
-// 	// ルーターをセットアップ
-// 	router := routes.SetupRouter(cfg, db)
-
-// 	// サーバー起動
-// 	log.Printf("サーバーを開始しています... PORT: %s", cfg.Server.Port)
-// 	if err := router.Run(":" + cfg.Server.Port); err != nil {
-// 		log.Fatalf("サーバーの起動に失敗しました: %v", err)
-// 	}
-// }
+	default:
+		log.Fatalf("不明なコマンドです: %s", command)
+	}
+}

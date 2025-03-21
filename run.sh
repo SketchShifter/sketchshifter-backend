@@ -1,7 +1,14 @@
 #!/bin/bash
 
-# 依存関係のインストール
-go mod tidy
+# 起動
+make prod
 
-# アプリケーションの実行
-go run cmd/app/main.go
+# 少し待つ
+sleep 5
+
+# マイグレーション
+make migrate-up
+
+
+# ログ
+make prod-logs
