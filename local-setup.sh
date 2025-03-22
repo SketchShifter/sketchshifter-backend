@@ -63,10 +63,11 @@ echo -e "${NC}"
 print_info "検出されたOS: $OS_TYPE"
 
 # 作業ディレクトリの設定
-DEFAULT_DIR="./processing-platform"
-print_step "作業ディレクトリを設定します"
-read -p "インストール先ディレクトリを入力してください [$DEFAULT_DIR]: " INSTALL_DIR
-INSTALL_DIR=${INSTALL_DIR:-$DEFAULT_DIR}
+DEFAULT_DIR="./"
+INSTALL_DIR=$DEFAULT_DIR
+# print_step "作業ディレクトリを設定します"
+# read -p "デフォルトのディレクトリを使用するにはEnterキー、それ以外の場合はディレクトリを入力してください [$DEFAULT_DIR]: " INSTALL_DIR
+# INSTALL_DIR=${INSTALL_DIR:-$DEFAULT_DIR}
 
 # Dockerのチェック
 print_step "Dockerのインストール状況をチェックしています..."
