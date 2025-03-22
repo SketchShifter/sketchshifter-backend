@@ -3,7 +3,7 @@ docker-compose.yml
 docker-compose.prod.yml
 Dockerfile
 Dockerfile.prod
-
+Makefile
 
 # バイナリファイル（ビルド成果物）
 *.exe

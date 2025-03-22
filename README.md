@@ -9,6 +9,18 @@
 
 # サーバー環境で実行
 ./setup-script-specific.sh
+
+# 本番モードで実行
+make prod
+
+# マイグレーション
+make migrate-up
+
+# 停止
+make stop
+
+# ログ表示
+make logs
 ```
 
 ### 必要条件
