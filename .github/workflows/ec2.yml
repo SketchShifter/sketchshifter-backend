@@ -44,8 +44,11 @@ jobs:
       # デプロイする
       - name: Deploy
         run: |
+          # 環境ファイルにIPアドレスを設定
+          echo "IP_ADDRESS=${{ steps.ip.outputs.ipv4 }}" >> $GITHUB_ENV
+
           # SSHのセキュリティグループを開放する
-          if ! aws ec2 authorize-security-group-ingress --group-id ${{ secrets.EC2_SECURITY_GROUP_ID }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32; then
+          if ! aws ec2 authorize-security-group-ingress --group-id ${{ secrets.EC2_SECURITY_GROUP_ID }} --protocol tcp --port 22 --cidr $IP_ADDRESS/32; then
             echo "Failed to authorize security group ingress"
             exit 1
           fi
@@ -59,7 +62,7 @@ jobs:
           fi
 
           # SSHのセキュリティグループを閉じる
-          if ! aws ec2 revoke-security-group-ingress --group-id ${{ secrets.EC2_SECURITY_GROUP_ID }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32; then
+          if ! aws ec2 revoke-security-group-ingress --group-id ${{ secrets.EC2_SECURITY_GROUP_ID }} --protocol tcp --port 22 --cidr $IP_ADDRESS/32; then
             echo "Failed to revoke security group ingress"
             exit 1
           fi
