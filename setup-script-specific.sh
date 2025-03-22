@@ -212,7 +212,7 @@ services:
       context: .
       dockerfile: Dockerfile.prod
     container_name: processing-api
-    restart: always
+    restart: on-failure:5
     ports:
       - "8080:8080"
     environment:
@@ -229,8 +229,14 @@ services:
       - GIN_MODE=release
     volumes:
       - ./uploads:/app/uploads
+    deploy:
+      resources:
+        limits:
+          cpus: '0.4'
+          memory: 384M
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - processing_network
     healthcheck:
@@ -257,10 +263,15 @@ services:
       - processing_network
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_password}"]
-      interval: 100s
+      interval: 10s
       timeout: 5s
       retries: 3
       start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
 networks:
   processing_network:
