@@ -37,15 +37,19 @@ dev:
 # 本番用アプリケーションを実行
 prod:
 	@echo "本番用アプリケーションを起動中..."
-	@sudo docker network inspect processing_network >/dev/null 2>&1 || sudo docker network create processing_network
+	@sudo docker network inspect processing_network >/dev/null 2>&1 || docker network create processing_network
 	sudo docker-compose -f docker-compose.prod.yml up -d
 	@echo "アプリケーションが起動しました。http://localhost:8080 にアクセスしてください。"
 	@echo "ログを表示するには 'make prod-logs' を実行してください。"
 
+# 本番用アプリケーションのログを表示
+prod-logs:
+	@echo "本番用アプリケーションのログを表示中..."
+	docker-compose -f docker-compose.prod.yml logs -f api
+
 # アプリケーションを停止
 stop:
 	@echo "アプリケーションを停止中..."
-	docker-compose down
 	docker-compose -f docker-compose.prod.yml down
 	@echo "アプリケーションを停止しました。"
 
@@ -62,9 +66,7 @@ prod-logs:
 # マイグレーションを実行
 migrate-up:
 	@echo "マイグレーションを実行中..."
-	@if docker-compose ps | grep -q "processing-api"; then \
-		docker-compose -f docker-compose.prod.yml exec api /app/app migrate up; \
-	elif docker-compose -f docker-compose.prod.yml ps | grep -q "processing-api"; then \
+	@if docker-compose -f docker-compose.prod.yml ps | grep -q "processing-api"; then \
 		docker-compose -f docker-compose.prod.yml exec api /app/app migrate up; \
 	else \
 		echo "APIコンテナが実行されていません。先に 'make run' または 'make prod' を実行してください。"; \
