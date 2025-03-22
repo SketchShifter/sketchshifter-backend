@@ -1,96 +1,77 @@
-# SketchShifter Backend
+# Processing作品共有プラットフォーム
 
-[swaggerはこちらです](https://mmm-tapj.vercel.app/)
+## セットアップ方法
 
-
-### とりあえずインストール
-
-```bash
-# リポジトリのクローン
-git clone https://github.com/SketchShifter/sketchshifter_backend.git
-cd github.com/SketchShifter/sketchshifter_backend/
-
-# 依存パッケージのインストール
-go mod tidy
-go mod download
-
-# ビルド
-make build
-make run
-make migrate-up
-```
-
-Processingで作成した作品を共有・閲覧するためのプラットフォームのバックエンドAPIです。
-
-## 機能
-
-- RESTful API提供
-- ユーザー認証（JWT）
-- 作品のアップロード・管理
-- コメント・いいね・お気に入り機能
-- タグ管理
-- ゲスト投稿機能
-
-## 環境構築
+このプロジェクトは Docker と Docker Compose を使用して実行されます。
 
 ### 必要条件
 
-- Go 1.21以上
-- PostgreSQL 14以上
-- Docker & Docker Compose (任意)
+- Docker
+- Docker Compose
+- make (オプション、便利なコマンドが使えます)
 
+### インストールと実行方法
 
-### Dockerでの起動
+1. 開発モードで実行:
 
 ```bash
-# Dockerイメージビルド＆コンテナ起動
-docker-compose up -d
-
-# ログ確認
-docker-compose logs -f
+make run
 ```
 
-## API仕様
+2. 本番モードで実行:
 
-### 認証
+```bash
+make prod
+```
 
-- `POST /api/auth/register` - ユーザー登録
-- `POST /api/auth/login` - ログイン
-- `GET /api/auth/me` - 現在のユーザー情報
+3. マイグレーションを実行:
 
-### 作品
+```bash
+make migrate-up
+```
 
-- `GET /api/works` - 作品一覧取得
-- `GET /api/works/:id` - 作品詳細取得
-- `POST /api/works` - 作品投稿
-- `PUT /api/works/:id` - 作品更新
-- `DELETE /api/works/:id` - 作品削除
-- `POST /api/works/preview` - プレビュー
+4. ログを表示:
 
-### いいね/お気に入り
+```bash
+make logs      # 開発モード
+make prod-logs # 本番モード
+```
 
-- `POST /api/works/:id/like` - いいね追加
-- `DELETE /api/works/:id/like` - いいね削除
-- `POST /api/works/:id/favorite` - お気に入り追加
-- `DELETE /api/works/:id/favorite` - お気に入り削除
+### アクセス方法
 
-### コメント
+- API: http://localhost:8080
+- PHPMyAdmin: http://localhost:8081 (開発モードのみ)
 
-- `GET /api/works/:id/comments` - コメント取得
-- `POST /api/works/:id/comments` - コメント追加
-- `PUT /api/comments/:id` - コメント更新
-- `DELETE /api/comments/:id` - コメント削除
+### データベース情報
 
-### タグ
+- ホスト: localhost
+- ポート: 3306
+- ユーザー名: processing_user
+- パスワード: processing_password
+- データベース名: processing_platform
 
-- `GET /api/tags` - タグ一覧取得
+## ディレクトリ構造
 
-### ユーザー
-
-- `GET /api/users/favorites` - お気に入り作品取得
-- `GET /api/users/:id` - ユーザー情報取得
-- `GET /api/users/:id/works` - ユーザー作品一覧取得
-
-## 開発
-
-このプロジェクトは現在モックデータを返すようになっています。実際のデータベース連携やストレージ実装は別途必要です！
+```
+.
+├── cmd/                  # エントリーポイント
+│   ├── app/              # メインアプリケーション
+│   └── migrate/          # マイグレーションツール
+├── internal/             # 内部パッケージ
+│   ├── config/           # 設定
+│   ├── controllers/      # コントローラー
+│   ├── middlewares/      # ミドルウェア
+│   ├── models/           # データモデル
+│   ├── repository/       # データアクセス層
+│   ├── routes/           # ルーティング
+│   ├── services/         # ビジネスロジック
+│   └── utils/            # ユーティリティ
+├── pkg/                  # 外部パッケージ
+├── uploads/              # アップロードされたファイル
+├── Dockerfile            # 開発用Dockerfile
+├── Dockerfile.prod       # 本番用Dockerfile
+├── docker-compose.yml    # 開発用Docker Compose設定
+├── docker-compose.prod.yml # 本番用Docker Compose設定
+├── go.mod                # Goモジュール定義
+└── Makefile              # ビルド・実行タスク
+```

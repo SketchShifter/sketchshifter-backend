@@ -1,6 +1,6 @@
 @base_url = http://localhost:8080
 @deploy_url = http://35.77.104.40:8080
-@use_url = {{deploy_url}}
+@use_url = {{base_url}}
 @token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJleHAiOjE3NDI2OTM5MjksImlhdCI6MTc0MjYwNzUyOX0.LryWF1mlu7ZqtpLV_a3fQWGSTJZrPipl7N-dHfxe3tI
 
 ### GET Request
@@ -8,6 +8,9 @@ GET {{use_url}}/api/v1/works
 
 ### GET Request with query parameter
 GET {{use_url}}/api/v1/works?name=John
+
+### GET Request is working
+GET {{use_url}}/api/v1/health
 
 ### POST Request
 POST {{use_url}}/api/v1/auth/register
