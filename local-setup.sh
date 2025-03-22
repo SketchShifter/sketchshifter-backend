@@ -220,7 +220,7 @@ services:
       - processing_network
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/v1/health"]
-      interval: 30s
+      interval: 300s
       timeout: 10s
       retries: 3
       start_period: 15s
@@ -242,7 +242,7 @@ services:
       - processing_network
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_password}"]
-      interval: 10s
+      interval: 100s
       timeout: 5s
       retries: 3
       start_period: 30s
@@ -411,8 +411,8 @@ build:
 # 開発用アプリケーションを実行
 run:
 	@echo "開発用アプリケーションを起動中..."
-	@docker network inspect processing_network >/dev/null 2>&1 || docker network create processing_network
-	docker-compose up -d
+	@sudo docker network inspect processing_network >/dev/null 2>&1 || sudo docker network create processing_network
+	sudo docker-compose up -d
 	@echo "アプリケーションが起動しました。http://localhost:8080 にアクセスしてください。"
 	@echo "PHPMyAdminは http://localhost:8081 で利用可能です。"
 	@echo "ログを表示するには 'make logs' を実行してください。"
@@ -420,14 +420,14 @@ run:
 # 開発モードで実行（ホットリロード）
 dev:
 	@echo "開発モード（ホットリロード）でアプリケーションを起動中..."
-	@docker network inspect processing_network >/dev/null 2>&1 || docker network create processing_network
-	docker-compose up
+	@sudo docker network inspect processing_network >/dev/null 2>&1 || sudo docker network create processing_network
+	sudo docker-compose up
 	
 # 本番用アプリケーションを実行
 prod:
 	@echo "本番用アプリケーションを起動中..."
-	@docker network inspect processing_network >/dev/null 2>&1 || docker network create processing_network
-	docker-compose -f docker-compose.prod.yml up -d
+	@sudo docker network inspect processing_network >/dev/null 2>&1 || sudo docker network create processing_network
+	sudo docker-compose -f docker-compose.prod.yml up -d
 	@echo "アプリケーションが起動しました。http://localhost:8080 にアクセスしてください。"
 	@echo "ログを表示するには 'make prod-logs' を実行してください。"
 
@@ -452,7 +452,7 @@ prod-logs:
 migrate-up:
 	@echo "マイグレーションを実行中..."
 	@if docker-compose ps | grep -q "processing-api"; then \
-		docker-compose exec api go run cmd/migrate/main.go up; \
+		docker-compose -f docker-compose.prod.yml exec api /app/app migrate up; \
 	elif docker-compose -f docker-compose.prod.yml ps | grep -q "processing-api"; then \
 		docker-compose -f docker-compose.prod.yml exec api /app/app migrate up; \
 	else \

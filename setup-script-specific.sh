@@ -235,7 +235,7 @@ services:
       - processing_network
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/v1/health"]
-      interval: 30s
+      interval: 300s
       timeout: 10s
       retries: 3
       start_period: 15s
@@ -257,7 +257,7 @@ services:
       - processing_network
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_password}"]
-      interval: 10s
+      interval: 100s
       timeout: 5s
       retries: 3
       start_period: 30s
@@ -459,27 +459,27 @@ help:
 # 本番用アプリケーションを実行
 prod:
 	@echo "本番用アプリケーションを起動中..."
-	@docker network inspect processing_network >/dev/null 2>&1 || docker network create processing_network
-	docker-compose -f docker-compose.prod.yml up -d
+	@sudo docker network inspect processing_network >/dev/null 2>&1 || sudo docker network create processing_network
+	sudo docker-compose -f docker-compose.prod.yml up -d
 	@echo "アプリケーションが起動しました。http://localhost:8080 にアクセスしてください。"
 	@echo "ログを表示するには 'make prod-logs' を実行してください。"
 
 # 本番用アプリケーションのログを表示
 prod-logs:
 	@echo "本番用アプリケーションのログを表示中..."
-	docker-compose -f docker-compose.prod.yml logs -f api
+	sudo docker-compose -f docker-compose.prod.yml logs -f api
 
 # アプリケーションを停止
 stop:
 	@echo "アプリケーションを停止中..."
-	docker-compose -f docker-compose.prod.yml down
+	sudo docker-compose -f docker-compose.prod.yml down
 	@echo "アプリケーションを停止しました。"
 
 # マイグレーションを実行
 migrate-up:
 	@echo "マイグレーションを実行中..."
-	@if docker-compose -f docker-compose.prod.yml ps | grep -q "processing-api"; then \
-		docker-compose -f docker-compose.prod.yml exec api /app/app migrate up; \
+	@if sudo docker-compose -f docker-compose.prod.yml ps | grep -q "processing-api"; then \
+		sudo docker-compose -f docker-compose.prod.yml exec api /app/app migrate up; \
 	else \
 		echo "APIコンテナが実行されていません。先に 'make prod' を実行してください。"; \
 		exit 1; \
@@ -489,8 +489,8 @@ migrate-up:
 # マイグレーションをロールバック
 migrate-down:
 	@echo "マイグレーションをロールバック中..."
-	@if docker-compose -f docker-compose.prod.yml ps | grep -q "processing-api"; then \
-		docker-compose -f docker-compose.prod.yml exec api /app/app migrate down; \
+	@if sudo docker-compose -f docker-compose.prod.yml ps | grep -q "processing-api"; then \
+		sudo docker-compose -f docker-compose.prod.yml exec api /app/app migrate down; \
 	else \
 		echo "APIコンテナが実行されていません。先に 'make prod' を実行してください。"; \
 		exit 1; \
@@ -500,8 +500,8 @@ migrate-down:
 # すべてのコンテナとボリュームを削除
 clean:
 	@echo "すべてのコンテナとボリュームを削除中..."
-	docker-compose -f docker-compose.prod.yml down -v
-	docker rmi -f $(docker images -q processing-api) 2>/dev/null || true
+	sudo docker-compose -f docker-compose.prod.yml down -v
+	sudo docker rmi -f $(sudo docker images -q processing-api) 2>/dev/null || true
 	@echo "クリーンアップが完了しました！"
 EOF
     echo "Makefileを作成しました"

@@ -2,7 +2,14 @@
 
 ## セットアップ方法
 
-このプロジェクトは Docker と Docker Compose を使用して実行されます。
+これだけは見て！！！！！！！！
+```bash
+# ローカル環境で実行
+./local-setup.sh
+
+# サーバー環境で実行
+./setup-script-specific.sh
+```
 
 ### 必要条件
 

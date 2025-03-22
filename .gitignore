@@ -1,4 +1,8 @@
 # 実行ファイル
+docker-compose.yml
+docker-compose.prod.yml
+Dockerfile
+Dockerfile.prod
 
 # バイナリファイル（ビルド成果物）
 *.exe
