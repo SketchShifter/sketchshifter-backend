@@ -2,9 +2,10 @@ package config
 
 // CloudflareConfig Cloudflare設定
 type CloudflareConfig struct {
-	WorkerURL   string
-	AccountID   string
-	APIToken    string
+	WorkerURL    string
+	APIKey       string
+	AccountID    string
+	APIToken     string
 	R2BucketName string
 }
 

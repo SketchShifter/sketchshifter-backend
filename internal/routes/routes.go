@@ -28,6 +28,8 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	userRepo := repository.NewUserRepository(db)
 	workRepo := repository.NewWorkRepository(db)
 	tagRepo := repository.NewTagRepository(db)
+	imageRepo := repository.NewImageRepository(db)
+	processingRepo := repository.NewProcessingRepository(db)
 	commentRepo := repository.NewCommentRepository(db)
 
 	// ユーティリティを作成
@@ -35,7 +37,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 
 	// サービスを作成
 	authService := services.NewAuthService(userRepo, cfg)
-	workService := services.NewWorkService(workRepo, tagRepo, cfg, fileUtils)
+	workService := services.NewWorkService(workRepo, tagRepo, imageRepo, processingRepo, cfg, fileUtils)
 	tagService := services.NewTagService(tagRepo)
 	commentService := services.NewCommentService(commentRepo, workRepo)
 	userService := services.NewUserService(userRepo, workRepo)
@@ -105,7 +107,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 			users.GET("/:id", userController.GetByID)
 			users.GET("/:id/works", userController.GetUserWorks)
 			users.GET("/favorites", authMiddleware, userController.GetUserFavorites)
-			
+
 			// 新規追加したエンドポイント
 			users.GET("/me", authMiddleware, userController.GetMe)
 			users.PUT("/profile", authMiddleware, userController.UpdateProfile)

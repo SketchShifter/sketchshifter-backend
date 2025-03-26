@@ -10,10 +10,12 @@ import (
 
 // Config アプリケーション設定
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	Auth     AuthConfig
-	Storage  StorageConfig
+	Server     ServerConfig
+	Database   DatabaseConfig
+	Auth       AuthConfig
+	Storage    StorageConfig
+	AWS        AWSConfig
+	Cloudflare CloudflareConfig
 }
 
 // ServerConfig サーバー設定
@@ -49,6 +51,19 @@ type StorageConfig struct {
 	AllowedTypes  []string
 }
 
+// AWSConfig AWS設定
+type AWSConfig struct {
+	Region                 string
+	WebpConversionQueueURL string
+	PdeConversionQueueURL  string
+}
+
+// // CloudflareConfig Cloudflare設定
+// type CloudflareConfig struct {
+// 	WorkerURL string
+// 	APIKey    string
+// }
+
 // Load 環境変数から設定をロード
 func Load() (*Config, error) {
 	// .env ファイルをロード (存在すれば)
@@ -80,6 +95,18 @@ func Load() (*Config, error) {
 			UploadDir:     getEnv("UPLOAD_DIR", "./uploads"),
 			MaxUploadSize: int64(getEnvAsInt("MAX_UPLOAD_SIZE", 50)) * 1024 * 1024, // MB to Bytes
 			AllowedTypes:  []string{".pde", ".png", ".jpg", ".jpeg", ".gif", ".webp"},
+		},
+		AWS: AWSConfig{
+			Region:                 getEnv("AWS_REGION", "ap-northeast-1"),
+			WebpConversionQueueURL: getEnv("AWS_WEBP_QUEUE_URL", ""),
+			PdeConversionQueueURL:  getEnv("AWS_PDE_QUEUE_URL", ""),
+		},
+		Cloudflare: CloudflareConfig{
+			WorkerURL:    getEnv("CLOUDFLARE_WORKER_URL", ""),
+			APIKey:       getEnv("CLOUDFLARE_API_KEY", ""),
+			R2BucketName: getEnv("R2_BUCKET_NAME", "sketchshifter-uploads"),
+			AccountID:    getEnv("CLOUDFLARE_ACCOUNT_ID", ""),
+			APIToken:     getEnv("CLOUDFLARE_API_TOKEN", ""),
 		},
 	}
 

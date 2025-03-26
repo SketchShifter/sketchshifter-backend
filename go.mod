@@ -3,6 +3,7 @@ module github.com/SketchShifter/sketchshifter_backend
 go 1.18
 
 require (
+	github.com/aws/aws-sdk-go v1.55.6
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/gin-gonic/gin v1.8.1
 	github.com/joho/godotenv v1.4.0
@@ -20,6 +21,7 @@ require (
 	github.com/goccy/go-json v0.9.7 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/leodido/go-urn v1.2.1 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect

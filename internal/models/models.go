@@ -104,6 +104,47 @@ type Comment struct {
 	Work Work  `json:"-"`
 }
 
+// Image 画像モデル
+type Image struct {
+	ID           uint           `json:"id" gorm:"primaryKey"`
+	WorkID       *uint          `json:"work_id" gorm:"index"`
+	FileName     string         `json:"file_name" gorm:"not null"`
+	OriginalPath string         `json:"original_path" gorm:"not null"`
+	WebpPath     string         `json:"webp_path"`
+	Status       string         `json:"status" gorm:"type:enum('pending','processing','processed','error');default:'pending'"`
+	ErrorMessage string         `json:"error_message"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
+
+	// リレーション
+	Work *Work `json:"work,omitempty" gorm:"foreignKey:WorkID"`
+}
+
+// ProcessingWork Processing作品モデル
+type ProcessingWork struct {
+	ID           uint           `json:"id" gorm:"primaryKey"`
+	WorkID       uint           `json:"work_id" gorm:"not null;index"`
+	FileName     string         `json:"file_name" gorm:"not null"`
+	OriginalName string         `json:"original_name"`
+	PDEPath      string         `json:"pde_path" gorm:"not null"`
+	JSPath       string         `json:"js_path"`
+	CanvasID     string         `json:"canvas_id"`
+	Status       string         `json:"status" gorm:"type:enum('pending','processing','processed','error');default:'pending'"`
+	ErrorMessage string         `json:"error_message"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
+
+	// リレーション
+	Work Work `json:"work,omitempty" gorm:"foreignKey:WorkID"`
+}
+
+// TableName テーブル名を指定
+func (ProcessingWork) TableName() string {
+	return "processing_works"
+}
+
 // TableName テーブル名を指定
 func (User) TableName() string {
 	return "users"
