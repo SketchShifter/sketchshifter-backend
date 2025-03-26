@@ -3,19 +3,22 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/SketchShifter/sketchshifter_backend/internal/config"
 	"github.com/SketchShifter/sketchshifter_backend/internal/repository"
-
+	
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
+	"gorm.io/gorm"
 )
 
 const (
-	defaultBatchSize        = 20
+	defaultBatchSize       = 20
 	defaultPendingThreshold = 100
 )
 
@@ -48,27 +51,27 @@ func main() {
 	if err != nil {
 		log.Fatalf("AWSセッションの初期化に失敗しました: %v", err)
 	}
-
+	
 	// 未処理の画像数をカウント
 	pendingCount, err := imageRepo.CountPendingImages()
 	if err != nil {
 		log.Fatalf("未処理画像のカウントに失敗しました: %v", err)
 	}
-
+	
 	log.Printf("未処理の画像が %d 件見つかりました", pendingCount)
-
+	
 	// しきい値を下回っていて強制実行でない場合は終了
 	if pendingCount < int64(*pendingThreshold) && !*forceSend {
 		log.Printf("未処理画像数がしきい値 %d を下回っているため、バッチ処理をスキップします", *pendingThreshold)
 		return
 	}
-
+	
 	// バッチ処理の実行
 	log.Printf("バッチ処理を開始します (最大 %d 件)", *batchSize)
 	if err := sendBatchToSQS(awsSession, cfg, *batchSize); err != nil {
 		log.Fatalf("バッチ処理の送信に失敗しました: %v", err)
 	}
-
+	
 	log.Println("バッチ処理が正常に送信されました")
 }
 
@@ -76,7 +79,7 @@ func main() {
 func sendBatchToSQS(awsSession *session.Session, cfg *config.Config, batchSize int) error {
 	// SQSクライアントを初期化
 	sqsSvc := sqs.New(awsSession)
-
+	
 	// メッセージ内容を作成
 	messageBody := struct {
 		Type      string `json:"type"`
@@ -87,17 +90,17 @@ func sendBatchToSQS(awsSession *session.Session, cfg *config.Config, batchSize i
 		BatchSize: batchSize,
 		Timestamp: time.Now().Format(time.RFC3339),
 	}
-
+	
 	messageJSON, err := json.Marshal(messageBody)
 	if err != nil {
 		return err
 	}
-
+	
 	// SQSにメッセージを送信
 	_, err = sqsSvc.SendMessage(&sqs.SendMessageInput{
 		QueueUrl:    aws.String(cfg.AWS.WebpConversionQueueURL),
 		MessageBody: aws.String(string(messageJSON)),
 	})
-
+	
 	return err
 }
