@@ -1,3 +1,5 @@
+SET FOREIGN_KEY_CHECKS=0;
+
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS external_accounts;
 DROP TABLE IF EXISTS tags;
@@ -6,7 +8,9 @@ DROP TABLE IF EXISTS work_tags;
 DROP TABLE IF EXISTS likes;
 DROP TABLE IF EXISTS comments;
 
--- users テーブル: ユーザー情報
+SET FOREIGN_KEY_CHECKS=1;
+
+-- ユーザーテーブル
 CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(255) NOT NULL UNIQUE,
@@ -19,25 +23,25 @@ CREATE TABLE users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- external_accounts テーブル: OAuth連携アカウント
+-- 外部アカウントテーブル
 CREATE TABLE external_accounts (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
-    provider VARCHAR(50) NOT NULL, -- 'google', 'github'など
+    provider VARCHAR(50) NOT NULL,
     external_id VARCHAR(255) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE (provider, external_id)
 );
 
--- tags テーブル: タグ情報
+-- タグテーブル
 CREATE TABLE tags (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(50) NOT NULL UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- works テーブル: 作品情報
+-- 作品テーブル
 CREATE TABLE works (
     id INT AUTO_INCREMENT PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
@@ -55,7 +59,7 @@ CREATE TABLE works (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
--- work_tags テーブル: 作品とタグの関連付け
+-- 作品とタグの関連付けテーブル
 CREATE TABLE work_tags (
     work_id INT NOT NULL,
     tag_id INT NOT NULL,
@@ -64,7 +68,7 @@ CREATE TABLE work_tags (
     FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
 );
 
--- likes テーブル: いいね情報
+-- いいねテーブル
 CREATE TABLE likes (
     user_id INT NOT NULL,
     work_id INT NOT NULL,
@@ -74,7 +78,7 @@ CREATE TABLE likes (
     FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
 );
 
--- comments テーブル: コメント情報
+-- コメントテーブル
 CREATE TABLE comments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     content TEXT NOT NULL,
@@ -87,3 +91,41 @@ CREATE TABLE comments (
     FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
+
+-- 画像テーブル
+CREATE TABLE images (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    work_id INT,
+    file_name VARCHAR(255) NOT NULL,
+    original_path VARCHAR(512) NOT NULL,
+    webp_path VARCHAR(512),
+    status ENUM('pending', 'processing', 'processed', 'error') DEFAULT 'pending',
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
+);
+
+-- Processing作品変換テーブル
+CREATE TABLE processing_works (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    work_id INT NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    original_name VARCHAR(255),
+    pde_path VARCHAR(512) NOT NULL,
+    js_path VARCHAR(512),
+    canvas_id VARCHAR(255),
+    status ENUM('pending', 'processing', 'processed', 'error') DEFAULT 'pending',
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
+);
+
+-- imagesテーブルの拡張（圧縮情報追加）
+ALTER TABLE images
+ADD COLUMN original_size BIGINT DEFAULT 0 COMMENT '元のファイルサイズ（バイト）',
+ADD COLUMN webp_size BIGINT DEFAULT 0 COMMENT '変換後のWebPファイルサイズ（バイト）',
+ADD COLUMN compression_ratio DOUBLE DEFAULT 0 COMMENT '圧縮率（パーセント）',
+ADD COLUMN width INT DEFAULT 0 COMMENT '画像の幅（ピクセル）',
+ADD COLUMN height INT DEFAULT 0 COMMENT '画像の高さ（ピクセル）';

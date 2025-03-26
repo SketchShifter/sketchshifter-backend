@@ -293,16 +293,15 @@ EOF
     
     # ランダムなパスワードと秘密鍵を生成
     if command -v openssl >/dev/null 2>&1; then
-        echo "DB_PASSWORD=$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9')" >> "$APP_DIR/.env"
-        echo "MYSQL_ROOT_PASSWORD=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9')" >> "$APP_DIR/.env"
         echo "JWT_SECRET=$(openssl rand -base64 32)" >> "$APP_DIR/.env"
     else
-        echo "DB_PASSWORD=$(< /dev/urandom tr -dc 'a-zA-Z0-9' | fold -w 12 | head -n 1)" >> "$APP_DIR/.env"
-        echo "MYSQL_ROOT_PASSWORD=$(< /dev/urandom tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)" >> "$APP_DIR/.env"
         echo "JWT_SECRET=$(< /dev/urandom tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)" >> "$APP_DIR/.env"
     fi
     
     echo "DB_NAME=processing_platform" >> "$APP_DIR/.env"
+    echo "DB_HOST=<RDSエンドポイント>" >> "$APP_DIR/.env"
+    echo "DB_PASSWORD=<パスワード>" >> "$APP_DIR/.env"
+    echo "MYSQL_ROOT_PASSWORD=<パスワード>" >> "$APP_DIR/.env"
     echo ".envファイルを作成しました"
 fi
 
