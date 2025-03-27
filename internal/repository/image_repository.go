@@ -17,6 +17,7 @@ type ImageRepository interface {
 	ListPendingImages(limit int) ([]models.Image, error)
 	UpdateStatus(id uint, status string, webpPath string, errorMessage string) error
 	CountPendingImages() (int64, error)
+	UpdateImageStats(id uint, webpPath string, originalSize int64, webpSize int64, compressionRatio float64, width int, height int) error
 }
 
 // imageRepository ImageRepositoryの実装
@@ -98,4 +99,19 @@ func (r *imageRepository) CountPendingImages() (int64, error) {
 		return 0, err
 	}
 	return count, nil
+}
+
+// UpdateImageStats 画像の統計情報を更新
+func (r *imageRepository) UpdateImageStats(id uint, webpPath string, originalSize int64, webpSize int64, compressionRatio float64, width int, height int) error {
+	return r.db.Model(&models.Image{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"webp_path":         webpPath,
+			"original_size":     originalSize,
+			"webp_size":         webpSize,
+			"compression_ratio": compressionRatio,
+			"width":             width,
+			"height":            height,
+			"status":            "processed",
+		}).Error
 }

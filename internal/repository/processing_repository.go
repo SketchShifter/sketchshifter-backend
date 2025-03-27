@@ -14,6 +14,7 @@ type ProcessingRepository interface {
 	Delete(id uint) error
 	FindByWorkID(workID uint) (*models.ProcessingWork, error)
 	UpdateStatus(id uint, status string, jsPath string, errorMessage string) error
+	GetPDEContent(id uint) (string, error)
 }
 
 // processingRepository ProcessingRepositoryの実装
@@ -79,4 +80,13 @@ func (r *processingRepository) UpdateStatus(id uint, status string, jsPath strin
 	return r.db.Model(&models.ProcessingWork{}).
 		Where("id = ?", id).
 		Updates(updates).Error
+}
+
+// GetPDEContent PDEコンテンツを取得
+func (r *processingRepository) GetPDEContent(id uint) (string, error) {
+	var processing models.ProcessingWork
+	if err := r.db.Select("pde_content").First(&processing, id).Error; err != nil {
+		return "", err
+	}
+	return processing.PDEContent, nil
 }

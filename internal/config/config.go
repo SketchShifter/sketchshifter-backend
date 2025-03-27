@@ -56,13 +56,14 @@ type AWSConfig struct {
 	Region                 string
 	WebpConversionQueueURL string
 	PdeConversionQueueURL  string
+	// Secrets ManagerとRDS Data APIの設定を削除
 }
 
-// // CloudflareConfig Cloudflare設定
-// type CloudflareConfig struct {
-// 	WorkerURL string
-// 	APIKey    string
-// }
+// CloudflareConfig Cloudflare設定
+type CloudflareConfig struct {
+	WorkerURL string
+	APIKey    string
+}
 
 // Load 環境変数から設定をロード
 func Load() (*Config, error) {
@@ -100,13 +101,11 @@ func Load() (*Config, error) {
 			Region:                 getEnv("AWS_REGION", "ap-northeast-1"),
 			WebpConversionQueueURL: getEnv("AWS_WEBP_QUEUE_URL", ""),
 			PdeConversionQueueURL:  getEnv("AWS_PDE_QUEUE_URL", ""),
+			// Secrets ManagerとRDS Data API関連の設定を削除
 		},
 		Cloudflare: CloudflareConfig{
-			WorkerURL:    getEnv("CLOUDFLARE_WORKER_URL", ""),
-			APIKey:       getEnv("CLOUDFLARE_API_KEY", ""),
-			R2BucketName: getEnv("R2_BUCKET_NAME", "sketchshifter-uploads"),
-			AccountID:    getEnv("CLOUDFLARE_ACCOUNT_ID", ""),
-			APIToken:     getEnv("CLOUDFLARE_API_TOKEN", ""),
+			WorkerURL: getEnv("CLOUDFLARE_WORKER_URL", ""),
+			APIKey:    getEnv("CLOUDFLARE_API_KEY", ""),
 		},
 	}
 

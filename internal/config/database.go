@@ -1,4 +1,3 @@
-// database.go の修正
 package config
 
 import (
@@ -30,6 +29,7 @@ func newCustomLogger() logger.Interface {
 
 // InitDB データベース接続を初期化
 func InitDB(cfg *Config) (*gorm.DB, error) {
+	// 直接MySQLに接続するDSNを作成 (RDS Data APIを使用しない)
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		cfg.Database.Username,
 		cfg.Database.Password,
