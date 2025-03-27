@@ -104,30 +104,14 @@ type Comment struct {
 	Work Work  `json:"-"`
 }
 
-// Image 画像モデル
-type Image struct {
-	ID           uint           `json:"id" gorm:"primaryKey"`
-	WorkID       *uint          `json:"work_id" gorm:"index"`
-	FileName     string         `json:"file_name" gorm:"not null"`
-	OriginalPath string         `json:"original_path" gorm:"not null"`
-	WebpPath     string         `json:"webp_path"`
-	Status       string         `json:"status" gorm:"type:enum('pending','processing','processed','error');default:'pending'"`
-	ErrorMessage string         `json:"error_message"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
-	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
-
-	// リレーション
-	Work *Work `json:"work,omitempty" gorm:"foreignKey:WorkID"`
-}
-
 // ProcessingWork Processing作品モデル
 type ProcessingWork struct {
 	ID           uint           `json:"id" gorm:"primaryKey"`
 	WorkID       uint           `json:"work_id" gorm:"not null;index"`
 	FileName     string         `json:"file_name" gorm:"not null"`
 	OriginalName string         `json:"original_name"`
-	PDEPath      string         `json:"pde_path" gorm:"not null"`
+	PDEContent   string         `json:"pde_content" gorm:"type:text"` // PDEファイルの内容を直接保存
+	PDEPath      string         `json:"pde_path"`                     // R2へのパスは省略可能に
 	JSPath       string         `json:"js_path"`
 	CanvasID     string         `json:"canvas_id"`
 	Status       string         `json:"status" gorm:"type:enum('pending','processing','processed','error');default:'pending'"`
@@ -138,6 +122,28 @@ type ProcessingWork struct {
 
 	// リレーション
 	Work Work `json:"work,omitempty" gorm:"foreignKey:WorkID"`
+}
+
+// Image 画像モデル
+type Image struct {
+	ID               uint           `json:"id" gorm:"primaryKey"`
+	WorkID           *uint          `json:"work_id" gorm:"index"`
+	FileName         string         `json:"file_name" gorm:"not null"`
+	OriginalPath     string         `json:"original_path" gorm:"not null"`
+	WebpPath         string         `json:"webp_path"`
+	Status           string         `json:"status" gorm:"type:enum('pending','processing','processed','error');default:'pending'"`
+	ErrorMessage     string         `json:"error_message"`
+	OriginalSize     int64          `json:"original_size" gorm:"default:0"`
+	WebpSize         int64          `json:"webp_size" gorm:"default:0"`
+	CompressionRatio float64        `json:"compression_ratio" gorm:"default:0"`
+	Width            int            `json:"width" gorm:"default:0"`
+	Height           int            `json:"height" gorm:"default:0"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	DeletedAt        gorm.DeletedAt `json:"-" gorm:"index"`
+
+	// リレーション
+	Work *Work `json:"work,omitempty" gorm:"foreignKey:WorkID"`
 }
 
 // TableName テーブル名を指定

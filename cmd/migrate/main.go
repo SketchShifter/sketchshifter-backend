@@ -39,6 +39,8 @@ func main() {
 			&models.Work{},
 			&models.Like{},
 			&models.Comment{},
+			&models.Image{},
+			&models.ProcessingWork{},
 		)
 		if err != nil {
 			log.Fatalf("マイグレーションに失敗しました: %v", err)
@@ -55,6 +57,8 @@ func main() {
 			&models.Tag{},
 			&models.ExternalAccount{},
 			&models.User{},
+			&models.Image{},
+			&models.ProcessingWork{},
 		)
 		if err != nil {
 			log.Fatalf("テーブル削除に失敗しました: %v", err)

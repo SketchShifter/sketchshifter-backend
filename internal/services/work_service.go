@@ -256,7 +256,67 @@ func (s *workService) uploadToCloudflareR2(file multipart.File, fileName, fileTy
 	return s.config.Cloudflare.WorkerURL + result.URL, nil
 }
 
-// queueImageForConversion 画像変換のためにSQSキューに追加
+// processPDEFile メソッドの変更
+func (s *workService) processPDEFile(workID uint, fileName, originalName string, pdeContent string) error {
+	// SQSクライアントを初期化
+	sqsSvc := sqs.New(s.awsSession)
+
+	// キューURLを設定
+	queueURL := s.config.AWS.PdeConversionQueueURL
+
+	// DBに処理情報を保存
+	canvasID := "processingCanvas_" + utils.GenerateRandomString(8)
+
+	processingID, err := s.processingRepo.Create(&models.ProcessingWork{
+		WorkID:       workID,
+		FileName:     fileName,
+		OriginalName: originalName,
+		PDEContent:   pdeContent, // PDEファイルの内容を直接保存
+		CanvasID:     canvasID,
+		Status:       "pending",
+	})
+
+	if err != nil {
+		return fmt.Errorf("Processing情報のDBへの保存に失敗しました: %v", err)
+	}
+
+	// メッセージ内容を作成
+	messageBody := struct {
+		Type           string `json:"type"`
+		ProcessingData struct {
+			ID           uint   `json:"id"`
+			WorkID       uint   `json:"workID"`
+			FileName     string `json:"fileName"`
+			OriginalName string `json:"originalName"`
+			PdeContent   string `json:"pdeContent"` // PDEファイルの内容を直接渡す
+			CanvasID     string `json:"canvasId"`
+		} `json:"processingData"`
+	}{
+		Type: "pde_conversion",
+	}
+
+	messageBody.ProcessingData.ID = processingID
+	messageBody.ProcessingData.WorkID = workID
+	messageBody.ProcessingData.FileName = fileName
+	messageBody.ProcessingData.OriginalName = originalName
+	messageBody.ProcessingData.PdeContent = pdeContent
+	messageBody.ProcessingData.CanvasID = canvasID
+
+	messageJSON, err := json.Marshal(messageBody)
+	if err != nil {
+		return err
+	}
+
+	// SQSにメッセージを送信
+	_, err = sqsSvc.SendMessage(&sqs.SendMessageInput{
+		QueueUrl:    aws.String(queueURL),
+		MessageBody: aws.String(string(messageJSON)),
+	})
+
+	return err
+}
+
+// queueImageForConversion メソッドの変更
 func (s *workService) queueImageForConversion(fileName, imageType string) error {
 	// SQSクライアントを初期化
 	sqsSvc := sqs.New(s.awsSession)
@@ -290,64 +350,6 @@ func (s *workService) queueImageForConversion(fileName, imageType string) error 
 	messageBody.ImageData.ID = imageID
 	messageBody.ImageData.FileName = fileName
 	messageBody.ImageData.ImageType = imageType
-
-	messageJSON, err := json.Marshal(messageBody)
-	if err != nil {
-		return err
-	}
-
-	// SQSにメッセージを送信
-	_, err = sqsSvc.SendMessage(&sqs.SendMessageInput{
-		QueueUrl:    aws.String(queueURL),
-		MessageBody: aws.String(string(messageJSON)),
-	})
-
-	return err
-}
-
-// processPDEFile PDEファイルをSQSキューに追加
-func (s *workService) processPDEFile(workID uint, fileName, originalName, pdePath string) error {
-	// SQSクライアントを初期化
-	sqsSvc := sqs.New(s.awsSession)
-
-	// キューURLを設定
-	queueURL := s.config.AWS.PdeConversionQueueURL
-
-	// DBに処理情報を保存
-	canvasID := "processingCanvas_" + utils.GenerateRandomString(8)
-
-	processingID, err := s.processingRepo.Create(&models.ProcessingWork{
-		WorkID:       workID,
-		FileName:     fileName,
-		OriginalName: originalName,
-		PDEPath:      pdePath,
-		CanvasID:     canvasID,
-		Status:       "pending",
-	})
-
-	if err != nil {
-		return fmt.Errorf("Processing情報のDBへの保存に失敗しました: %v", err)
-	}
-
-	// メッセージ内容を作成
-	messageBody := struct {
-		Type           string `json:"type"`
-		ProcessingData struct {
-			ID           uint   `json:"id"`
-			WorkID       uint   `json:"workID"`
-			FileName     string `json:"fileName"`
-			OriginalName string `json:"originalName"`
-			CanvasID     string `json:"canvasId"`
-		} `json:"processingData"`
-	}{
-		Type: "pde_conversion",
-	}
-
-	messageBody.ProcessingData.ID = processingID
-	messageBody.ProcessingData.WorkID = workID
-	messageBody.ProcessingData.FileName = fileName
-	messageBody.ProcessingData.OriginalName = originalName
-	messageBody.ProcessingData.CanvasID = canvasID
 
 	messageJSON, err := json.Marshal(messageBody)
 	if err != nil {

@@ -157,3 +157,83 @@ func (c *AuthController) ChangePassword(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{"message": "パスワードが正常に変更されました"})
 }
+
+// GetMe、UpdateProfile、GetMyWorksメソッドを追加
+// GetMe 自分のユーザー情報を取得
+// func (c *UserController) GetMe(ctx *gin.Context) {
+// 	// ユーザー情報を取得
+// 	user, exists := ctx.Get("user")
+// 	if !exists {
+// 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "認証が必要です"})
+// 		return
+// 	}
+
+// 	ctx.JSON(http.StatusOK, user)
+// }
+
+// // UpdateProfile 自分のプロフィールを更新
+// func (c *UserController) UpdateProfile(ctx *gin.Context) {
+// 	// ユーザー情報を取得
+// 	user, exists := ctx.Get("user")
+// 	if !exists {
+// 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "認証が必要です"})
+// 		return
+// 	}
+// 	u := user.(*models.User)
+
+// 	// リクエストをバインド
+// 	var req UserUpdateRequest
+// 	if err := ctx.ShouldBindJSON(&req); err != nil {
+// 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+// 		return
+// 	}
+
+// 	// プロフィールを更新
+// 	updatedUser, err := c.userService.UpdateProfile(u.ID, req.Name, req.Nickname, req.Bio)
+// 	if err != nil {
+// 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+// 		return
+// 	}
+
+// 	ctx.JSON(http.StatusOK, updatedUser)
+// }
+
+// // GetMyWorks 自分の作品一覧を取得
+// func (c *UserController) GetMyWorks(ctx *gin.Context) {
+// 	// ユーザー情報を取得
+// 	user, exists := ctx.Get("user")
+// 	if !exists {
+// 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "認証が必要です"})
+// 		return
+// 	}
+// 	u := user.(*models.User)
+
+// 	// クエリパラメータを取得
+// 	pageStr := ctx.DefaultQuery("page", "1")
+// 	limitStr := ctx.DefaultQuery("limit", "20")
+
+// 	// 数値パラメータを解析
+// 	page, err := strconv.Atoi(pageStr)
+// 	if err != nil || page < 1 {
+// 		page = 1
+// 	}
+
+// 	limit, err := strconv.Atoi(limitStr)
+// 	if err != nil || limit < 1 || limit > 100 {
+// 		limit = 20
+// 	}
+
+// 	// 作品一覧を取得
+// 	works, total, pages, err := c.userService.GetUserWorks(u.ID, page, limit)
+// 	if err != nil {
+// 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+// 		return
+// 	}
+
+// 	ctx.JSON(http.StatusOK, WorksResponse{
+// 		Works: works,
+// 		Total: total,
+// 		Pages: pages,
+// 		Page:  page,
+// 	})
+// }
