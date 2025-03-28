@@ -47,15 +47,20 @@ func (f *fileUtils) SaveFile(src io.Reader, destPath string) (string, error) {
 		return "", err
 	}
 
-	// 相対パスに変換
-	relPath := strings.ReplaceAll(destPath, "\\", "/")
-	if strings.HasPrefix(relPath, "./") {
-		relPath = relPath[2:]
+	// 絶対パスから相対URLに変換
+	uploadDir := "/app/uploads"
+	if strings.Contains(destPath, uploadDir) {
+		relPath := strings.Split(destPath, uploadDir)[1]
+		// 先頭のスラッシュを確保して末尾に余計なスラッシュがないことを確認
+		relPath = strings.TrimPrefix(relPath, "/")
+		url := "/uploads/" + relPath
+		return url, nil
 	}
 
+	// ファイル名のみを取得
+	fileName := filepath.Base(destPath)
 	// URLを返す
-	url := f.baseURL + "/" + relPath
-	return url, nil
+	return f.baseURL + "/" + fileName, nil
 }
 
 // DeleteFile ファイルを削除

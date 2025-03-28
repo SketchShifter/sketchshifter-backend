@@ -45,6 +45,8 @@ type workService struct {
 	config         *config.Config
 	fileUtils      utils.FileUtils
 	awsSession     *session.Session
+	cloudflareURL  string
+	apiKey         string
 }
 
 // NewWorkService WorkServiceを作成
@@ -74,6 +76,8 @@ func NewWorkService(
 		config:         cfg,
 		fileUtils:      fileUtils,
 		awsSession:     awsSession,
+		cloudflareURL:  os.Getenv("CLOUDFLARE_WORKER_URL"),
+		apiKey:         os.Getenv("CLOUDFLARE_API_KEY"),
 	}
 }
 
@@ -98,10 +102,30 @@ func (s *workService) Create(title, description string, file, thumbnail multipar
 	// 新しいファイル名を生成
 	fileName := fmt.Sprintf("%d_%s", time.Now().Unix(), utils.GenerateRandomString(8)+fileExt)
 
-	// CloudflareワーカーにファイルをアップロードするためのURLを取得
-	fileURL, err := s.uploadToCloudflareR2(file, fileName, "original")
-	if err != nil {
-		return nil, fmt.Errorf("ファイルのアップロードに失敗しました: %v", err)
+	var fileURL string
+	var err error
+
+	// Cloudflare R2にアップロードする（設定されている場合）
+	if s.cloudflareURL != "" && s.apiKey != "" {
+		fileURL, err = s.uploadToCloudflareR2(file, fileName, "original")
+		if err != nil {
+			// CloudflareへのアップロードAPサーブに失敗した場合のログ
+			fmt.Printf("Cloudflare R2へのアップロードに失敗しました: %v - ローカルにフォールバックします\n", err)
+
+			// ローカルにフォールバック
+			filePath := filepath.Join(s.config.Storage.UploadDir, fileName)
+			fileURL, err = s.fileUtils.SaveFile(file, filePath)
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		// ローカルにファイルを保存
+		filePath := filepath.Join(s.config.Storage.UploadDir, fileName)
+		fileURL, err = s.fileUtils.SaveFile(file, filePath)
+		if err != nil {
+			return nil, fmt.Errorf("ファイルの保存に失敗しました: %v", err)
+		}
 	}
 
 	// サムネイルをアップロード
@@ -110,15 +134,34 @@ func (s *workService) Create(title, description string, file, thumbnail multipar
 		thumbnailExt := strings.ToLower(filepath.Ext(thumbnailHeader.Filename))
 		thumbnailName := fmt.Sprintf("thumb_%d_%s", time.Now().Unix(), utils.GenerateRandomString(8)+thumbnailExt)
 
-		thumbnailURL, err = s.uploadToCloudflareR2(thumbnail, thumbnailName, "original")
-		if err != nil {
-			return nil, fmt.Errorf("サムネイルのアップロードに失敗しました: %v", err)
+		if s.cloudflareURL != "" && s.apiKey != "" {
+			thumbnailURL, err = s.uploadToCloudflareR2(thumbnail, thumbnailName, "original")
+			if err != nil {
+				// CloudflareへのアップロードAPIに失敗した場合のログ
+				fmt.Printf("Cloudflare R2へのサムネイルアップロードに失敗しました: %v - ローカルにフォールバックします\n", err)
+
+				// ローカルにフォールバック
+				thumbnailPath := filepath.Join(s.config.Storage.UploadDir, thumbnailName)
+				thumbnailURL, err = s.fileUtils.SaveFile(thumbnail, thumbnailPath)
+				if err != nil {
+					return nil, err
+				}
+			}
+		} else {
+			// ローカルにサムネイルを保存
+			thumbnailPath := filepath.Join(s.config.Storage.UploadDir, thumbnailName)
+			thumbnailURL, err = s.fileUtils.SaveFile(thumbnail, thumbnailPath)
+			if err != nil {
+				return nil, fmt.Errorf("サムネイルのアップロードに失敗しました: %v", err)
+			}
 		}
 
-		// サムネイルの画像変換キューに追加
-		if err := s.queueImageForConversion(thumbnailName, "thumbnail"); err != nil {
-			// エラーがあっても処理は続行
-			fmt.Printf("サムネイル変換キューの登録に失敗しました: %v\n", err)
+		// サムネイルの画像変換キューに追加（Cloudflare R2を使用している場合）
+		if s.cloudflareURL != "" && s.apiKey != "" && s.awsSession != nil {
+			if err := s.queueImageForConversion(thumbnailName, "thumbnail"); err != nil {
+				// エラーがあっても処理は続行
+				fmt.Printf("サムネイル変換キューの登録に失敗しました: %v\n", err)
+			}
 		}
 	}
 
@@ -159,12 +202,12 @@ func (s *workService) Create(title, description string, file, thumbnail multipar
 	}
 
 	// Processing作品の場合、変換キューに追加
-	if fileExt == ".pde" {
-		if err := s.processPDEFile(work.ID, fileName, fileHeader.Filename, fileURL); err != nil {
+	if fileExt == ".pde" && s.awsSession != nil {
+		if err := s.processPDEFile(work.ID, fileName, fileHeader.Filename, codeContent); err != nil {
 			// エラーがあっても作品の作成自体は成功とする
 			fmt.Printf("PDE変換キューの登録に失敗しました: %v\n", err)
 		}
-	} else if isImageFile(fileExt) {
+	} else if isImageFile(fileExt) && s.awsSession != nil {
 		// 画像ファイルの場合、変換キューに追加
 		if err := s.queueImageForConversion(fileName, "work"); err != nil {
 			// エラーがあっても処理は続行
@@ -216,13 +259,13 @@ func (s *workService) uploadToCloudflareR2(file multipart.File, fileName, fileTy
 	writer.Close()
 
 	// Cloudflare Workerにリクエスト
-	req, err := http.NewRequest("POST", s.config.Cloudflare.WorkerURL+"/upload", body)
+	req, err := http.NewRequest("POST", s.cloudflareURL+"/upload", body)
 	if err != nil {
 		return "", err
 	}
 
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("X-API-Key", s.config.Cloudflare.APIKey)
+	req.Header.Set("X-API-Key", s.apiKey)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -253,7 +296,7 @@ func (s *workService) uploadToCloudflareR2(file multipart.File, fileName, fileTy
 	}
 
 	// URLを返す
-	return s.config.Cloudflare.WorkerURL + result.URL, nil
+	return s.cloudflareURL + result.URL, nil
 }
 
 // processPDEFile メソッドの変更
@@ -401,9 +444,6 @@ func (s *workService) isAllowedExtension(ext string) bool {
 	return false
 }
 
-// 他のメソッドは変更なしで維持
-// Update, Delete, List, AddLike, RemoveLike, HasLiked, ListByUser, CreatePreview
-
 // Update 作品を更新
 func (s *workService) Update(id uint, title, description string, file, thumbnail multipart.File, fileHeader, thumbnailHeader *multipart.FileHeader, codeShared bool, codeContent string, tagNames []string, userID uint) (*models.Work, error) {
 	// 作品を取得
@@ -436,35 +476,113 @@ func (s *workService) Update(id uint, title, description string, file, thumbnail
 			return nil, fmt.Errorf("ファイルサイズが大きすぎます (最大 %d MB)", s.config.Storage.MaxUploadSize/1024/1024)
 		}
 
-		// 新しいファイルを保存
+		// 新しいファイル名を生成
 		fileName := fmt.Sprintf("%d_%s", time.Now().Unix(), utils.GenerateRandomString(8)+fileExt)
-		filePath := filepath.Join(s.config.Storage.UploadDir, fileName)
-		fileURL, err := s.fileUtils.SaveFile(file, filePath)
-		if err != nil {
-			return nil, err
+
+		var fileURL string
+
+		// Cloudflare R2にアップロード（設定されている場合）
+		if s.cloudflareURL != "" && s.apiKey != "" {
+			fileURL, err = s.uploadToCloudflareR2(file, fileName, "original")
+			if err != nil {
+				// CloudflareへのアップロードAPサーブに失敗した場合のログ
+				fmt.Printf("Cloudflare R2へのアップロードに失敗しました: %v - ローカルにフォールバックします\n", err)
+
+				// ローカルにフォールバック
+				filePath := filepath.Join(s.config.Storage.UploadDir, fileName)
+				fileURL, err = s.fileUtils.SaveFile(file, filePath)
+				if err != nil {
+					return nil, err
+				}
+			}
+		} else {
+			// ローカルにファイルを保存
+			filePath := filepath.Join(s.config.Storage.UploadDir, fileName)
+			fileURL, err = s.fileUtils.SaveFile(file, filePath)
+			if err != nil {
+				return nil, err
+			}
 		}
 
-		// 古いファイルを削除
+		// 古いファイルを削除（ローカルまたはR2）
 		if work.FileURL != "" {
-			_ = os.Remove(filepath.Join(s.config.Storage.UploadDir, filepath.Base(work.FileURL)))
+			if strings.Contains(work.FileURL, s.cloudflareURL) && s.cloudflareURL != "" && s.apiKey != "" {
+				// R2の場合はCloudflare Workerを使って削除
+				filePath := strings.TrimPrefix(work.FileURL, s.cloudflareURL)
+				s.deleteFromCloudflareR2(filePath)
+			} else {
+				// ローカルの場合は直接削除
+				filePath := strings.TrimPrefix(work.FileURL, "/uploads")
+				_ = os.Remove(filepath.Join(s.config.Storage.UploadDir, filePath))
+			}
 		}
 
 		work.FileURL = fileURL
+
+		// Processing作品の場合、変換キューに追加
+		if fileExt == ".pde" && s.awsSession != nil {
+			if err := s.processPDEFile(work.ID, fileName, fileHeader.Filename, codeContent); err != nil {
+				// エラーがあっても処理は続行
+				fmt.Printf("PDE変換キューの登録に失敗しました: %v\n", err)
+			}
+		} else if isImageFile(fileExt) && s.awsSession != nil {
+			// 画像ファイルの場合、変換キューに追加
+			if err := s.queueImageForConversion(fileName, "work"); err != nil {
+				// エラーがあっても処理は続行
+				fmt.Printf("画像変換キューの登録に失敗しました: %v\n", err)
+			}
+		}
 	}
 
 	// サムネイルがアップロードされた場合は更新
 	if thumbnail != nil && thumbnailHeader != nil {
 		thumbnailExt := strings.ToLower(filepath.Ext(thumbnailHeader.Filename))
 		thumbnailName := fmt.Sprintf("thumb_%d_%s", time.Now().Unix(), utils.GenerateRandomString(8)+thumbnailExt)
-		thumbnailPath := filepath.Join(s.config.Storage.UploadDir, thumbnailName)
-		thumbnailURL, err := s.fileUtils.SaveFile(thumbnail, thumbnailPath)
-		if err != nil {
-			return nil, err
+
+		var thumbnailURL string
+
+		// Cloudflare R2にアップロード（設定されている場合）
+		if s.cloudflareURL != "" && s.apiKey != "" {
+			thumbnailURL, err = s.uploadToCloudflareR2(thumbnail, thumbnailName, "original")
+			if err != nil {
+				// CloudflareへのアップロードAPIに失敗した場合のログ
+				fmt.Printf("Cloudflare R2へのサムネイルアップロードに失敗しました: %v - ローカルにフォールバックします\n", err)
+
+				// ローカルにフォールバック
+				thumbnailPath := filepath.Join(s.config.Storage.UploadDir, thumbnailName)
+				thumbnailURL, err = s.fileUtils.SaveFile(thumbnail, thumbnailPath)
+				if err != nil {
+					return nil, err
+				}
+			}
+
+			// サムネイルの画像変換キューに追加
+			if s.awsSession != nil {
+				if err := s.queueImageForConversion(thumbnailName, "thumbnail"); err != nil {
+					// エラーがあっても処理は続行
+					fmt.Printf("サムネイル変換キューの登録に失敗しました: %v\n", err)
+				}
+			}
+		} else {
+			// ローカルにサムネイルを保存
+			thumbnailPath := filepath.Join(s.config.Storage.UploadDir, thumbnailName)
+			thumbnailURL, err = s.fileUtils.SaveFile(thumbnail, thumbnailPath)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		// 古いサムネイルを削除
 		if work.ThumbnailURL != "" {
-			_ = os.Remove(filepath.Join(s.config.Storage.UploadDir, filepath.Base(work.ThumbnailURL)))
+			if strings.Contains(work.ThumbnailURL, s.cloudflareURL) && s.cloudflareURL != "" && s.apiKey != "" {
+				// R2の場合はCloudflare Workerを使って削除
+				filePath := strings.TrimPrefix(work.ThumbnailURL, s.cloudflareURL)
+				s.deleteFromCloudflareR2(filePath)
+			} else {
+				// ローカルの場合は直接削除
+				filePath := strings.TrimPrefix(work.ThumbnailURL, "/uploads")
+				_ = os.Remove(filepath.Join(s.config.Storage.UploadDir, filePath))
+			}
 		}
 
 		work.ThumbnailURL = thumbnailURL
@@ -535,6 +653,29 @@ func (s *workService) Update(id uint, title, description string, file, thumbnail
 	return s.GetByID(id)
 }
 
+// deleteFromCloudflareR2 R2からファイルを削除
+func (s *workService) deleteFromCloudflareR2(path string) error {
+	req, err := http.NewRequest("DELETE", s.cloudflareURL+"/file"+path, nil)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("X-API-Key", s.apiKey)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Cloudflare Workerが失敗しました: %s", resp.Status)
+	}
+
+	return nil
+}
+
 // Delete 作品を削除
 func (s *workService) Delete(id, userID uint) error {
 	// 作品を取得
@@ -550,12 +691,28 @@ func (s *workService) Delete(id, userID uint) error {
 
 	// ファイルを削除
 	if work.FileURL != "" {
-		_ = os.Remove(filepath.Join(s.config.Storage.UploadDir, filepath.Base(work.FileURL)))
+		if strings.Contains(work.FileURL, s.cloudflareURL) && s.cloudflareURL != "" && s.apiKey != "" {
+			// R2の場合はCloudflare Workerを使って削除
+			filePath := strings.TrimPrefix(work.FileURL, s.cloudflareURL)
+			s.deleteFromCloudflareR2(filePath)
+		} else {
+			// ローカルの場合は直接削除
+			filePath := strings.TrimPrefix(work.FileURL, "/uploads")
+			_ = os.Remove(filepath.Join(s.config.Storage.UploadDir, filePath))
+		}
 	}
 
 	// サムネイルを削除
 	if work.ThumbnailURL != "" {
-		_ = os.Remove(filepath.Join(s.config.Storage.UploadDir, filepath.Base(work.ThumbnailURL)))
+		if strings.Contains(work.ThumbnailURL, s.cloudflareURL) && s.cloudflareURL != "" && s.apiKey != "" {
+			// R2の場合はCloudflare Workerを使って削除
+			filePath := strings.TrimPrefix(work.ThumbnailURL, s.cloudflareURL)
+			s.deleteFromCloudflareR2(filePath)
+		} else {
+			// ローカルの場合は直接削除
+			filePath := strings.TrimPrefix(work.ThumbnailURL, "/uploads")
+			_ = os.Remove(filepath.Join(s.config.Storage.UploadDir, filePath))
+		}
 	}
 
 	// データベースから削除
@@ -671,17 +828,37 @@ func (s *workService) CreatePreview(file multipart.File, fileHeader *multipart.F
 
 		// 一時ファイルとして保存
 		fileName := fmt.Sprintf("preview_%d_%s", time.Now().Unix(), utils.GenerateRandomString(8)+fileExt)
-		previewPath = filepath.Join(s.config.Storage.UploadDir, "preview", fileName)
 
-		// ディレクトリが存在することを確認
-		if err := os.MkdirAll(filepath.Join(s.config.Storage.UploadDir, "preview"), 0755); err != nil {
-			return "", err
-		}
+		// Cloudflare R2にアップロードするか、ローカルに保存するか
+		if s.cloudflareURL != "" && s.apiKey != "" {
+			// プレビュー用のファイルはCloudflare R2にアップロードしない
+			// ローカルに保存
+			previewPath = filepath.Join(s.config.Storage.UploadDir, "preview", fileName)
 
-		var err error
-		previewURL, err = s.fileUtils.SaveFile(file, previewPath)
-		if err != nil {
-			return "", err
+			// ディレクトリが存在することを確認
+			if err := os.MkdirAll(filepath.Join(s.config.Storage.UploadDir, "preview"), 0755); err != nil {
+				return "", err
+			}
+
+			var err error
+			previewURL, err = s.fileUtils.SaveFile(file, previewPath)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			// ローカルに保存
+			previewPath = filepath.Join(s.config.Storage.UploadDir, "preview", fileName)
+
+			// ディレクトリが存在することを確認
+			if err := os.MkdirAll(filepath.Join(s.config.Storage.UploadDir, "preview"), 0755); err != nil {
+				return "", err
+			}
+
+			var err error
+			previewURL, err = s.fileUtils.SaveFile(file, previewPath)
+			if err != nil {
+				return "", err
+			}
 		}
 	} else if code != "" {
 		// コードからファイルを作成
