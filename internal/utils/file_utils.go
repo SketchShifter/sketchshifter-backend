@@ -5,7 +5,6 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -47,27 +46,30 @@ func (f *fileUtils) SaveFile(src io.Reader, destPath string) (string, error) {
 		return "", err
 	}
 
-	// 相対パスに変換
-	relPath := strings.ReplaceAll(destPath, "\\", "/")
-	if strings.HasPrefix(relPath, "./") {
-		relPath = relPath[2:]
-	}
+	// ファイル名だけを取得
+	fileName := filepath.Base(destPath)
 
-	// URLを返す
-	url := f.baseURL + "/" + relPath
+	// URLを構築 - 常に単純な形式を使用
+	url := "/uploads/" + fileName
+
 	return url, nil
 }
 
 // DeleteFile ファイルを削除
 func (f *fileUtils) DeleteFile(path string) error {
-	// 絶対パスに変換
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return err
+	// まずパスからファイル名を抽出
+	fileName := filepath.Base(path)
+
+	// ファイルパスを再構築
+	filePath := filepath.Join(f.baseURL, fileName)
+
+	// ファイルの存在を確認
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return nil // ファイルが存在しなければ成功とみなす
 	}
 
 	// ファイルを削除
-	return os.Remove(absPath)
+	return os.Remove(filePath)
 }
 
 // GenerateRandomString ランダムな文字列を生成

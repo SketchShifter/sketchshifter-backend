@@ -7,6 +7,8 @@ DROP TABLE IF EXISTS works;
 DROP TABLE IF EXISTS work_tags;
 DROP TABLE IF EXISTS likes;
 DROP TABLE IF EXISTS comments;
+DROP TABLE IF EXISTS images;
+DROP TABLE IF EXISTS processing_works;
 
 SET FOREIGN_KEY_CHECKS=1;
 
@@ -129,3 +131,19 @@ ADD COLUMN webp_size BIGINT DEFAULT 0 COMMENT '変換後のWebPファイルサ�
 ADD COLUMN compression_ratio DOUBLE DEFAULT 0 COMMENT '圧縮率（パーセント）',
 ADD COLUMN width INT DEFAULT 0 COMMENT '画像の幅（ピクセル）',
 ADD COLUMN height INT DEFAULT 0 COMMENT '画像の高さ（ピクセル）';
+
+-- 新しいマイグレーションファイル: 20250329_utf8mb4_update.sql を作成
+
+-- データベースのデフォルト文字セットを設定
+ALTER DATABASE CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 既存のテーブルを変換
+ALTER TABLE users CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE external_accounts CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE tags CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE works CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE work_tags CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE likes CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE comments CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE images CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE processing_works CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
