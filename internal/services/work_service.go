@@ -47,6 +47,8 @@ type workService struct {
 	awsSession     *session.Session
 	cloudflareURL  string
 	apiKey         string
+	cloudflareURL  string
+	apiKey         string
 }
 
 // NewWorkService WorkServiceを作成

@@ -69,61 +69,63 @@ func (r *workRepository) IncrementViews(id uint) error {
 
 // List 作品一覧を取得
 func (r *workRepository) List(page, limit int, search, tag string, userID *uint, sort string) ([]models.Work, int64, error) {
-	var works []models.Work
-	var total int64
+    var works []models.Work
+    var total int64
 
-	offset := (page - 1) * limit
+    offset := (page - 1) * limit
 
-	query := r.db.Model(&models.Work{}).Preload("User").Preload("Tags")
+    query := r.db.Model(&models.Work{}).Preload("User").Preload("Tags")
 
-	// 検索条件を適用
-	if search != "" {
-		query = query.Where("title LIKE ? OR description LIKE ?", "%"+search+"%", "%"+search+"%")
-	}
+    // 検索条件を適用
+    if search != "" {
+        query = query.Where("title LIKE ? OR description LIKE ?", "%"+search+"%", "%"+search+"%")
+    }
 
-	// タグでフィルタリング
-	if tag != "" {
-		query = query.Joins("JOIN work_tags ON works.id = work_tags.work_id").
-			Joins("JOIN tags ON work_tags.tag_id = tags.id").
-			Where("tags.name = ?", tag)
-	}
+    // タグでフィルタリング
+    if tag != "" {
+        query = query.Joins("JOIN work_tags ON works.id = work_tags.work_id").
+            Joins("JOIN tags ON work_tags.tag_id = tags.id").
+            Where("tags.name = ?", tag)
+    }
 
-	// ユーザーでフィルタリング
-	if userID != nil {
-		query = query.Where("user_id = ?", *userID)
-	}
+    // ユーザーでフィルタリング
+    if userID != nil {
+        query = query.Where("user_id = ?", *userID)
+    }
 
-	// 合計数を取得
-	if err := query.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
+    // 合計数を取得
+    if err := query.Count(&total).Error; err != nil {
+        return nil, 0, err
+    }
 
-	// ソート順を適用
-	switch sort {
-	case "popular":
-		query = query.Order("likes_count DESC, views DESC")
-	case "views":
-		query = query.Order("views DESC")
-	default: // "newest"
-		query = query.Order("created_at DESC")
-	}
+    // ソート順を適用（views列を基準にする）
+    switch sort {
+    case "popular":
+        // likes_countカラムがないので、viewsのみでソート
+        query = query.Order("views DESC")
+    case "views":
+        query = query.Order("views DESC")
+    default: // "newest"
+        query = query.Order("created_at DESC")
+    }
 
-	// データを取得
-	if err := query.
-		Offset(offset).
-		Limit(limit).
-		Find(&works).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, 0, err
-	}
+    // データを取得
+    if err := query.
+        Offset(offset).
+        Limit(limit).
+        Find(&works).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+        return nil, 0, err
+    }
 
-	// 各作品のいいね数とコメント数を取得
-	for i := range works {
-		r.db.Model(&models.Like{}).Where("work_id = ?", works[i].ID).Count(&works[i].LikesCount)
-		r.db.Model(&models.Comment{}).Where("work_id = ?", works[i].ID).Count(&works[i].CommentsCount)
-	}
+    // 各作品のいいね数とコメント数を取得
+    for i := range works {
+        r.db.Model(&models.Like{}).Where("work_id = ?", works[i].ID).Count(&works[i].LikesCount)
+        r.db.Model(&models.Comment{}).Where("work_id = ?", works[i].ID).Count(&works[i].CommentsCount)
+    }
 
-	return works, total, nil
+    return works, total, nil
 }
+
 
 // AddLike いいねを追加
 func (r *workRepository) AddLike(userID, workID uint) error {
