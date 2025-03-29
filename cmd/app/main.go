@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/SketchShifter/sketchshifter_backend/internal/config"
@@ -22,6 +23,18 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("設定の読み込みに失敗しました: %v", err)
+	}
+
+	// アップロードディレクトリが存在することを確認
+	if err := os.MkdirAll(cfg.Storage.UploadDir, 0755); err != nil {
+		log.Fatalf("アップロードディレクトリの作成に失敗しました: %v", err)
+	}
+
+	// プレビューディレクトリも作成
+	previewDir := filepath.Join(cfg.Storage.UploadDir, "preview")
+	if err := os.MkdirAll(previewDir, 0755); err != nil {
+		log.Printf("プレビューディレクトリの作成に失敗しました: %v", err)
+		// 致命的ではないので続行
 	}
 
 	// コマンドライン引数をチェック
@@ -93,6 +106,8 @@ func handleMigration(cfg *config.Config, args []string) {
 			&models.Work{},
 			&models.Like{},
 			&models.Comment{},
+			&models.Image{},
+			&models.ProcessingWork{},
 		)
 		if err != nil {
 			log.Fatalf("マイグレーションに失敗しました: %v", err)
@@ -110,6 +125,8 @@ func handleMigration(cfg *config.Config, args []string) {
 			&models.Tag{},
 			&models.ExternalAccount{},
 			&models.User{},
+			&models.Image{},
+			&models.ProcessingWork{},
 		)
 		if err != nil {
 			log.Fatalf("テーブル削除に失敗しました: %v", err)

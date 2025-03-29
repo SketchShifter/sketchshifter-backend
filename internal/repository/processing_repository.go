@@ -15,6 +15,9 @@ type ProcessingRepository interface {
 	FindByWorkID(workID uint) (*models.ProcessingWork, error)
 	UpdateStatus(id uint, status string, jsPath string, errorMessage string) error
 	GetPDEContent(id uint) (string, error)
+	// バッチ処理用の追加メソッド
+	ListPendingProcessings(limit int) ([]models.ProcessingWork, error)
+	CountPendingProcessings() (int64, error)
 }
 
 // processingRepository ProcessingRepositoryの実装
@@ -89,4 +92,30 @@ func (r *processingRepository) GetPDEContent(id uint) (string, error) {
 		return "", err
 	}
 	return processing.PDEContent, nil
+}
+
+// ListPendingProcessings 未処理のProcessing作品リストを取得
+func (r *processingRepository) ListPendingProcessings(limit int) ([]models.ProcessingWork, error) {
+	var processings []models.ProcessingWork
+
+	if err := r.db.Where("status = ?", "pending").
+		Limit(limit).
+		Order("created_at ASC").
+		Find(&processings).Error; err != nil {
+		return nil, err
+	}
+
+	return processings, nil
+}
+
+// CountPendingProcessings 未処理のProcessing作品数をカウント
+func (r *processingRepository) CountPendingProcessings() (int64, error) {
+	var count int64
+	if err := r.db.Model(&models.ProcessingWork{}).
+		Where("status = ?", "pending").
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+
+	return count, nil
 }

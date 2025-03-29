@@ -46,11 +46,32 @@ func (f *fileUtils) SaveFile(src io.Reader, destPath string) (string, error) {
 		return "", err
 	}
 
-	// ファイル名だけを取得
-	fileName := filepath.Base(destPath)
+	// URLを構築 - パスの後半部分だけを使用してURLを構築
+	url := f.baseURL
 
-	// URLを構築 - 常に単純な形式を使用
-	url := "/uploads/" + fileName
+	// uploads/ディレクトリからの相対パスを計算
+	// まずdestPathから最後のuploadsディレクトリ以降を抽出
+	uploadsIndex := -1
+	for i := len(destPath) - 1; i >= 0; i-- {
+		if i+7 <= len(destPath) && destPath[i:i+7] == "uploads" {
+			uploadsIndex = i + 7 // "uploads"の後のインデックス
+			break
+		}
+	}
+
+	if uploadsIndex != -1 && uploadsIndex < len(destPath) {
+		// uploadsディレクトリの後の部分を取得
+		relativePath := destPath[uploadsIndex:]
+		if len(relativePath) > 0 && relativePath[0] == filepath.Separator {
+			relativePath = relativePath[1:] // 先頭のスラッシュを削除
+		}
+		// パスをURL形式に正規化（WindowsのパスをURLに適したものに変換）
+		url = f.baseURL + "/" + filepath.ToSlash(relativePath)
+	} else {
+		// 単純にファイル名だけを使用
+		fileName := filepath.Base(destPath)
+		url = f.baseURL + "/" + fileName
+	}
 
 	return url, nil
 }
@@ -60,8 +81,15 @@ func (f *fileUtils) DeleteFile(path string) error {
 	// まずパスからファイル名を抽出
 	fileName := filepath.Base(path)
 
-	// ファイルパスを再構築
-	filePath := filepath.Join(f.baseURL, fileName)
+	// パスがURLの場合、ファイルパスに変換
+	filePath := ""
+	if len(path) > 0 && path[0] == '/' {
+		// パスが/で始まる場合は相対パスとみなす
+		filePath = filepath.Join(f.baseURL, path[1:])
+	} else {
+		// 絶対パスの場合はそのまま使用
+		filePath = filepath.Join(f.baseURL, fileName)
+	}
 
 	// ファイルの存在を確認
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {

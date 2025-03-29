@@ -10,12 +10,12 @@ import (
 
 // Config アプリケーション設定
 type Config struct {
-	Server     ServerConfig
-	Database   DatabaseConfig
-	Auth       AuthConfig
-	Storage    StorageConfig
-	AWS        AWSConfig
-	Cloudflare CloudflareConfig
+	Server           ServerConfig
+	Database         DatabaseConfig
+	Auth             AuthConfig
+	Storage          StorageConfig
+	AWS              AWSConfig
+	CloudflareWorker CloudflareWorkerConfig // 追加: Cloudflare Worker設定
 }
 
 // ServerConfig サーバー設定
@@ -23,6 +23,7 @@ type ServerConfig struct {
 	Port         string
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
+	APIBaseURL   string // APIのベースURL（Lambda関数のコールバック用）
 }
 
 // DatabaseConfig データベース設定
@@ -53,16 +54,16 @@ type StorageConfig struct {
 
 // AWSConfig AWS設定
 type AWSConfig struct {
-	Region                 string
-	WebpConversionQueueURL string
-	PdeConversionQueueURL  string
-	// Secrets ManagerとRDS Data APIの設定を削除
+	Region         string
+	LambdaEndpoint string // PDE変換Lambda関数のエンドポイント
 }
 
-// CloudflareConfig Cloudflare設定
-type CloudflareConfig struct {
-	WorkerURL string
-	APIKey    string
+// CloudflareWorkerConfig Cloudflare Worker設定
+type CloudflareWorkerConfig struct {
+	URL     string // Cloudflare Workerのエンドポイント
+	APIKey  string // Cloudflare WorkerのAPIキー
+	Bucket  string // Cloudflare R2のバケット名
+	Enabled bool   // 有効かどうか
 }
 
 // Load 環境変数から設定をロード
@@ -76,6 +77,7 @@ func Load() (*Config, error) {
 			Port:         getEnv("SERVER_PORT", "8080"),
 			ReadTimeout:  time.Duration(getEnvAsInt("SERVER_READ_TIMEOUT", 10)) * time.Second,
 			WriteTimeout: time.Duration(getEnvAsInt("SERVER_WRITE_TIMEOUT", 10)) * time.Second,
+			APIBaseURL:   getEnv("API_BASE_URL", "https://api.serendicode-sub.click"),
 		},
 		Database: DatabaseConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
@@ -98,14 +100,14 @@ func Load() (*Config, error) {
 			AllowedTypes:  []string{".pde", ".png", ".jpg", ".jpeg", ".gif", ".webp"},
 		},
 		AWS: AWSConfig{
-			Region:                 getEnv("AWS_REGION", "ap-northeast-1"),
-			WebpConversionQueueURL: getEnv("AWS_WEBP_QUEUE_URL", ""),
-			PdeConversionQueueURL:  getEnv("AWS_PDE_QUEUE_URL", ""),
-			// Secrets ManagerとRDS Data API関連の設定を削除
+			Region:         getEnv("AWS_REGION", "ap-northeast-1"),
+			LambdaEndpoint: getEnv("AWS_LAMBDA_ENDPOINT", ""),
 		},
-		Cloudflare: CloudflareConfig{
-			WorkerURL: getEnv("CLOUDFLARE_WORKER_URL", ""),
-			APIKey:    getEnv("CLOUDFLARE_API_KEY", ""),
+		CloudflareWorker: CloudflareWorkerConfig{
+			URL:     getEnv("CLOUDFLARE_WORKER_URL", ""),
+			APIKey:  getEnv("CLOUDFLARE_API_KEY", ""),
+			Bucket:  getEnv("CLOUDFLARE_BUCKET", "sketchshifter-bucket"),
+			Enabled: getEnvAsBool("CLOUDFLARE_ENABLED", false),
 		},
 	}
 
@@ -125,6 +127,18 @@ func getEnv(key, defaultValue string) string {
 func getEnvAsInt(key string, defaultValue int) int {
 	valueStr := getEnv(key, "")
 	if value, err := strconv.Atoi(valueStr); err == nil {
+		return value
+	}
+	return defaultValue
+}
+
+// getEnvAsBool 環境変数をboolとして取得
+func getEnvAsBool(key string, defaultValue bool) bool {
+	valueStr := getEnv(key, "")
+	if valueStr == "" {
+		return defaultValue
+	}
+	if value, err := strconv.ParseBool(valueStr); err == nil {
 		return value
 	}
 	return defaultValue

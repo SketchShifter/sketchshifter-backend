@@ -43,9 +43,9 @@ type LikeResponse struct {
 }
 
 // PreviewResponse プレビューレスポンス
-type PreviewResponse struct {
-	PreviewURL string `json:"preview_url"`
-}
+// type PreviewResponse struct {
+// 	PreviewURL string `json:"preview_url"`
+// }
 
 // Create 新しい作品を作成
 func (c *WorkController) Create(ctx *gin.Context) {
@@ -390,10 +390,10 @@ func (c *WorkController) CreatePreview(ctx *gin.Context) {
 	}
 
 	// ファイルまたはコードを取得
-	file, fileHeader, err := ctx.Request.FormFile("file")
+	file, fileHeader, _ := ctx.Request.FormFile("file")
 	code := ctx.PostForm("code")
 
-	if (err != nil || file == nil) && code == "" {
+	if (file == nil || fileHeader == nil) && code == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ファイルまたはコードが必要です"})
 		return
 	}
