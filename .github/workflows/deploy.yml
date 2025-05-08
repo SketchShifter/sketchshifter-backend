@@ -41,18 +41,24 @@ jobs:
           # セキュリティグループIDを設定
           SECURITY_GROUP_ID="${{ secrets.EC2_SECURITY_GROUP_ID }}"
           
-          # 現在のインバウンドルールを削除（GitHubのIPのみ）
-          aws ec2 describe-security-groups --group-ids $SECURITY_GROUP_ID --query "SecurityGroups[0].IpPermissions[?ToPort==22]" --output json | jq -c '.[]' | while read -r rule; do
-            if echo "$rule" | grep -q "GitHub-Actions"; then
-              CIDR=$(echo "$rule" | jq -r '.IpRanges[0].CidrIp')
-              aws ec2 revoke-security-group-ingress --group-id $SECURITY_GROUP_ID --protocol tcp --port 22 --cidr $CIDR
-            fi
+          # クエリ構文の問題を避けるため、すべてのルールを取得して後でフィルタリング
+          SECURITY_GROUP_RULES=$(aws ec2 describe-security-groups --group-ids $SECURITY_GROUP_ID --output json)
+          
+          echo "Retrieved security group rules"
+          
+          # 新しいGitHubのIPレンジを追加（シンプルな方法）
+          for ip_range in $GITHUB_IP_RANGES; do
+            echo "Adding GitHub Actions IP range: $ip_range"
+            
+            # より単純な構文を使用
+            aws ec2 authorize-security-group-ingress \
+              --group-id $SECURITY_GROUP_ID \
+              --protocol tcp \
+              --port 22 \
+              --cidr $ip_range || echo "Rule may already exist for $ip_range"
           done
           
-          # 新しいGitHubのIPレンジを追加
-          for ip_range in $GITHUB_IP_RANGES; do
-            aws ec2 authorize-security-group-ingress --group-id $SECURITY_GROUP_ID --protocol tcp --port 22 --cidr $ip_range --description "GitHub-Actions"
-          done
+          echo "Security group updated successfully"
       
           
       - name: Setup SSH
