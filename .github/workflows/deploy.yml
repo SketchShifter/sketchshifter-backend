@@ -6,7 +6,6 @@ on:
     paths-ignore:
       - '**.md'
       - 'docs/**'
-      - 'README.md'
 
 jobs:
   build-and-deploy:
@@ -38,121 +37,137 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
       
+      - name: Debug AWS and EC2 information
+        run: |
+          echo "AWS Region: ${{ secrets.AWS_REGION }}"
+          echo "EC2 Instance ID: ${{ secrets.EC2_INSTANCE_ID }}"
+          
+          # EC2インスタンスの存在確認
+          echo "Checking if EC2 instance exists..."
+          aws ec2 describe-instances --instance-ids ${{ secrets.EC2_INSTANCE_ID }} --query "Reservations[0].Instances[0].State.Name" --output text || echo "Instance not found or not accessible"
+          
+          # SSMマネージドインスタンスの確認
+          echo "Checking if instance is managed by SSM..."
+          aws ssm describe-instance-information --filters "Key=InstanceIds,Values=${{ secrets.EC2_INSTANCE_ID }}" --query "InstanceInformationList[0].PingStatus" --output text || echo "Instance not managed by SSM"
+      
+      - name: Run Simple Test Command via SSM
+        run: |
+          echo "Running simple test command to verify SSM access..."
+          TEST_CMD=$(aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+            --parameters 'commands=["echo Hello from SSM"]' \
+            --output text)
+            
+          echo "Test command result: $TEST_CMD"
+          sleep 5
+      
       - name: Deploy to EC2 via SSM
         run: |
           # 現在の日時を取得（ユニークなデプロイIDとして使用）
           DEPLOY_ID=$(date +%Y%m%d%H%M%S)
           echo "Starting deployment $DEPLOY_ID"
           
+          # 永続的なファイル名を使用（タイムスタンプなし）
+          echo "Creating main deployment files with consistent names..."
+          
           # S3にアプリケーションファイルをアップロード
           echo "Uploading application files to S3..."
-          aws s3 cp app s3://${{ secrets.S3_BUCKET_NAME }}/deploy/app-$DEPLOY_ID
-          aws s3 cp docker-compose.yml s3://${{ secrets.S3_BUCKET_NAME }}/deploy/docker-compose.yml-$DEPLOY_ID
-          aws s3 cp Dockerfile s3://${{ secrets.S3_BUCKET_NAME }}/deploy/Dockerfile-$DEPLOY_ID
+          aws s3 cp app s3://${{ secrets.S3_BUCKET_NAME }}/deploy/app
+          aws s3 cp docker-compose.yml s3://${{ secrets.S3_BUCKET_NAME }}/deploy/docker-compose.yml
+          aws s3 cp Dockerfile s3://${{ secrets.S3_BUCKET_NAME }}/deploy/Dockerfile
           
           # 環境変数ファイルを作成してS3にアップロード
           echo "${{ secrets.ENV_FILE }}" > env_file.txt
-          aws s3 cp env_file.txt s3://${{ secrets.S3_BUCKET_NAME }}/deploy/.env-$DEPLOY_ID
+          aws s3 cp env_file.txt s3://${{ secrets.S3_BUCKET_NAME }}/deploy/.env
           
-          # メインデプロイスクリプトを作成
-          echo "Creating main deployment script..."
+          # 単一のシンプルなデプロイスクリプトを作成
           cat > deploy.sh << 'EOF'
           #!/bin/bash
           set -e
+          set -x
           
-          # 引数からデプロイIDを取得
-          DEPLOY_ID=$1
-          APP_DIR=$2
-          S3_BUCKET=$3
+          # 引数からディレクトリ情報とS3バケットを取得
+          APP_DIR=$1
+          S3_BUCKET=$2
           
-          echo "==== Starting deployment process $DEPLOY_ID ===="
+          echo "==== Starting deployment process ===="
           echo "Deploying to directory: $APP_DIR"
           echo "Using S3 bucket: $S3_BUCKET"
+          echo "Running as user: $(whoami)"
+          echo "Current directory: $(pwd)"
           
-          # アプリケーションディレクトリの作成
-          mkdir -p $APP_DIR/uploads
-          chmod 755 $APP_DIR/uploads
-          cd $APP_DIR
+          # アプリケーションディレクトリの確認・作成
+          echo "Setting up application directory..."
+          mkdir -p "$APP_DIR" "$APP_DIR/uploads"
+          chmod 755 "$APP_DIR/uploads"
+          cd "$APP_DIR"
           
-          echo "Downloading files from S3..."
-          # S3からファイルをダウンロード
-          aws s3 cp s3://$S3_BUCKET/deploy/app-$DEPLOY_ID app
-          aws s3 cp s3://$S3_BUCKET/deploy/docker-compose.yml-$DEPLOY_ID docker-compose.yml
-          aws s3 cp s3://$S3_BUCKET/deploy/Dockerfile-$DEPLOY_ID Dockerfile
-          aws s3 cp s3://$S3_BUCKET/deploy/.env-$DEPLOY_ID .env
+          # アプリケーションファイルのダウンロード
+          echo "Downloading application files from S3..."
+          aws s3 cp "s3://$S3_BUCKET/deploy/app" app || { echo "Failed to download app"; exit 1; }
+          aws s3 cp "s3://$S3_BUCKET/deploy/docker-compose.yml" docker-compose.yml || { echo "Failed to download docker-compose.yml"; exit 1; }
+          aws s3 cp "s3://$S3_BUCKET/deploy/Dockerfile" Dockerfile || { echo "Failed to download Dockerfile"; exit 1; }
+          aws s3 cp "s3://$S3_BUCKET/deploy/.env" .env || { echo "Failed to download .env"; exit 1; }
           
-          # 実行権限を設定
+          # 実行権限の設定
+          echo "Setting permissions..."
           chmod +x app
           
+          # ディレクトリ権限の確認
+          echo "Current permissions:"
+          ls -la
+          
+          # Dockerの状態確認
+          echo "Checking Docker status..."
+          docker info || { echo "Docker not running or not accessible"; exit 1; }
+          
+          # 既存コンテナの停止
           echo "Stopping existing containers..."
-          # Dockerコンテナの再起動
-          docker-compose down || true
+          docker-compose down || echo "No containers to stop"
           
-          echo "Building and starting new containers..."
-          docker-compose up -d
+          # 新コンテナの起動
+          echo "Starting new containers..."
+          docker-compose up -d || { echo "Failed to start containers"; exit 1; }
           
-          # デプロイ確認
-          echo "Waiting for container to start..."
+          # 起動確認
+          echo "Waiting for containers to start..."
           sleep 10
           
           echo "Container status:"
-          docker ps | grep processing-api || echo "Container not found!"
+          docker ps
           
-          echo "Container logs (last 10 lines):"
-          docker logs processing-api --tail 10 || echo "Failed to get logs"
-          
-          echo "Cleaning up temporary files from S3..."
-          aws s3 rm s3://$S3_BUCKET/deploy/app-$DEPLOY_ID
-          aws s3 rm s3://$S3_BUCKET/deploy/docker-compose.yml-$DEPLOY_ID
-          aws s3 rm s3://$S3_BUCKET/deploy/Dockerfile-$DEPLOY_ID
-          aws s3 rm s3://$S3_BUCKET/deploy/.env-$DEPLOY_ID
+          echo "Container logs:"
+          docker logs processing-api --tail 20 || echo "No logs available"
           
           echo "==== Deployment completed successfully! ===="
           EOF
           
-          # S3にメインデプロイスクリプトをアップロード
+          # デプロイスクリプトをS3にアップロード
           chmod +x deploy.sh
-          aws s3 cp deploy.sh s3://${{ secrets.S3_BUCKET_NAME }}/deploy/deploy-$DEPLOY_ID.sh
+          aws s3 cp deploy.sh s3://${{ secrets.S3_BUCKET_NAME }}/deploy/deploy.sh
           
-          # EC2実行用のコマンドスクリプトを作成
-          echo "Creating EC2 command script..."
-          cat > ec2_commands.sh << EOF
-          #!/bin/bash
-          cd /tmp
-          aws s3 cp s3://${{ secrets.S3_BUCKET_NAME }}/deploy/deploy-$DEPLOY_ID.sh .
-          chmod +x deploy-$DEPLOY_ID.sh
-          ./deploy-$DEPLOY_ID.sh $DEPLOY_ID ${{ secrets.APP_DIRECTORY }} ${{ secrets.S3_BUCKET_NAME }}
-          rm deploy-$DEPLOY_ID.sh
-          EOF
-          
-          # S3にEC2コマンドスクリプトをアップロード
-          chmod +x ec2_commands.sh
-          aws s3 cp ec2_commands.sh s3://${{ secrets.S3_BUCKET_NAME }}/deploy/ec2_commands-$DEPLOY_ID.sh
-          
-          echo "Sending command to EC2 via SSM..."
-          # SSMでシンプルにS3からスクリプトを実行するコマンドを送信
-          aws ssm send-command \
-            --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
+          echo "Sending deployment command to EC2 via SSM..."
+          # 単一のSSMコマンドでデプロイを実行
+          COMMAND_OUTPUT=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
-            --parameters commands="aws s3 cp s3://${{ secrets.S3_BUCKET_NAME }}/deploy/ec2_commands-$DEPLOY_ID.sh /tmp/ && chmod +x /tmp/ec2_commands-$DEPLOY_ID.sh && /tmp/ec2_commands-$DEPLOY_ID.sh && rm /tmp/ec2_commands-$DEPLOY_ID.sh" \
-            --output text
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+            --parameters commands="cd /tmp && aws s3 cp s3://${{ secrets.S3_BUCKET_NAME }}/deploy/deploy.sh . && chmod +x deploy.sh && ./deploy.sh ${{ secrets.APP_DIRECTORY }} ${{ secrets.S3_BUCKET_NAME }}" \
+            --output json)
           
-          echo "Cleaning up temporary deployment scripts..."
-          # 一時ファイルの削除
-          aws s3 rm s3://${{ secrets.S3_BUCKET_NAME }}/deploy/deploy-$DEPLOY_ID.sh
-          aws s3 rm s3://${{ secrets.S3_BUCKET_NAME }}/deploy/ec2_commands-$DEPLOY_ID.sh
+          echo "SSM Command submitted"
+          COMMAND_ID=$(echo $COMMAND_OUTPUT | jq -r '.Command.CommandId')
+          echo "Command ID: $COMMAND_ID"
           
-          echo "Deployment process initiated on EC2 instance"
-          echo "Check the AWS SSM console for command execution details"
-          
-      - name: Check deployment status
-        run: |
-          # 30秒待機してEC2でのデプロイ処理が進むようにする
-          echo "Waiting 30 seconds for deployment to progress..."
+          # 結果を待機
+          echo "Waiting for command execution to complete..."
           sleep 30
           
-          # コマンド実行のステータスをチェック（修正版）
-          echo "Checking latest command executions..."
-          aws ssm list-commands --max-items 5 --output table
+          # コマンド実行結果の確認
+          echo "Checking command execution status..."
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${{ secrets.EC2_INSTANCE_ID }}" \
+            --output json || echo "Command execution details not available yet"
           
-          echo "For detailed execution results, check AWS SSM console"
+          echo "Deployment process initiated. Check AWS SSM console for full details."
