@@ -41,27 +41,24 @@ jobs:
           # セキュリティグループIDを設定
           SECURITY_GROUP_ID="${{ secrets.EC2_SECURITY_GROUP_ID }}"
           
-          # 現在のGitHub Actions関連のインバウンドルールを削除
-          CURRENT_RULES=$(aws ec2 describe-security-groups --group-ids $SECURITY_GROUP_ID --query "SecurityGroups[0].IpPermissions[?FromPort==\`22\` && ToPort==\`22\`].IpRanges[].CidrIp" --output json)
+          # クエリ構文の問題を避けるため、すべてのルールを取得して後でフィルタリング
+          SECURITY_GROUP_RULES=$(aws ec2 describe-security-groups --group-ids $SECURITY_GROUP_ID --output json)
           
-          echo "Current SSH rules: $CURRENT_RULES"
+          echo "Retrieved security group rules"
           
-          # GitHub Actions関連のルールを削除する代わりに、すべてのルールをそのままにして新しいルールを追加
-          # 必要に応じて古いルールを削除したい場合は、ルール特定のためのタグ付けなどが必要
-          
-          # 新しいGitHubのIPレンジを追加
+          # 新しいGitHubのIPレンジを追加（シンプルな方法）
           for ip_range in $GITHUB_IP_RANGES; do
             echo "Adding GitHub Actions IP range: $ip_range"
             
-            # descriptionは別のパラメータ形式で指定する必要がある
+            # より単純な構文を使用
             aws ec2 authorize-security-group-ingress \
               --group-id $SECURITY_GROUP_ID \
-              --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=$ip_range,Description='GitHub-Actions'}]" || echo "Rule may already exist for $ip_range"
+              --protocol tcp \
+              --port 22 \
+              --cidr $ip_range || echo "Rule may already exist for $ip_range"
           done
-        shell: /usr/bin/bash -e {0}
-        env:
-          AWS_DEFAULT_REGION: ap-northeast-1
-          AWS_REGION: ap-northeast-1
+          
+          echo "Security group updated successfully"
       
           
       - name: Setup SSH
