@@ -33,7 +33,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-northeast-1
 
-      - name: Update Security Group for GitHub Actions
+      - name: Update Security Group
         run: |
           # GitHubのMetaエンドポイントからIPレンジを取得
           GITHUB_IP_RANGES=$(curl -s https://api.github.com/meta | jq -r '.actions[]')
@@ -41,22 +41,27 @@ jobs:
           # セキュリティグループIDを設定
           SECURITY_GROUP_ID="${{ secrets.EC2_SECURITY_GROUP_ID }}"
           
-          # 既存のGitHub Actionsルールを削除（タグベース）
-          RULE_IDS=$(aws ec2 describe-security-group-rules \
-            --filter "Name=group-id,Values=$SECURITY_GROUP_ID" "Name=tag-key,Values=Source" "Name=tag-value,Values=GitHub-Actions" \
-            --query "SecurityGroupRules[*].SecurityGroupRuleId" --output text)
+          # 現在のGitHub Actions関連のインバウンドルールを削除
+          CURRENT_RULES=$(aws ec2 describe-security-groups --group-ids $SECURITY_GROUP_ID --query "SecurityGroups[0].IpPermissions[?FromPort==\`22\` && ToPort==\`22\`].IpRanges[].CidrIp" --output json)
           
-          for rule_id in $RULE_IDS; do
-            aws ec2 revoke-security-group-ingress --group-id $SECURITY_GROUP_ID --security-group-rule-ids $rule_id
-          done
+          echo "Current SSH rules: $CURRENT_RULES"
+          
+          # GitHub Actions関連のルールを削除する代わりに、すべてのルールをそのままにして新しいルールを追加
+          # 必要に応じて古いルールを削除したい場合は、ルール特定のためのタグ付けなどが必要
           
           # 新しいGitHubのIPレンジを追加
           for ip_range in $GITHUB_IP_RANGES; do
+            echo "Adding GitHub Actions IP range: $ip_range"
+            
+            # descriptionは別のパラメータ形式で指定する必要がある
             aws ec2 authorize-security-group-ingress \
               --group-id $SECURITY_GROUP_ID \
-              --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=$ip_range}]" \
-              --tag-specifications "ResourceType=security-group-rule,Tags=[{Key=Source,Value=GitHub-Actions}]"
+              --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=$ip_range,Description='GitHub-Actions'}]" || echo "Rule may already exist for $ip_range"
           done
+        shell: /usr/bin/bash -e {0}
+        env:
+          AWS_DEFAULT_REGION: ap-northeast-1
+          AWS_REGION: ap-northeast-1
       
           
       - name: Setup SSH
