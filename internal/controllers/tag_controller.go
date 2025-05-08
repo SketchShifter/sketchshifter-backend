@@ -5,7 +5,6 @@ import (
 	"strconv"
 
 	"github.com/SketchShifter/sketchshifter_backend/internal/services"
-
 	"github.com/gin-gonic/gin"
 )
 

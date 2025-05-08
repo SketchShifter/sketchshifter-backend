@@ -16,7 +16,7 @@ type TagRepository interface {
 	FindByID(id uint) (*models.Tag, error)
 	FindByName(name string) (*models.Tag, error)
 	AttachTagsToWork(workID uint, tagIDs []uint) error
-	DetachTagsFromWork(workID uint, tagIDs []uint) error
+	DetachTagsFromWork(workID uint) error
 	GetTagsForWork(workID uint) ([]models.Tag, error)
 }
 
@@ -91,41 +91,24 @@ func (r *tagRepository) FindByName(name string) (*models.Tag, error) {
 
 // AttachTagsToWork 作品にタグを関連付け
 func (r *tagRepository) AttachTagsToWork(workID uint, tagIDs []uint) error {
-	// 既存のタグ関連を取得
-	var existingTagIDs []uint
-	if err := r.db.Table("work_tags").
-		Where("work_id = ?", workID).
-		Pluck("tag_id", &existingTagIDs).Error; err != nil {
+	// 既存のタグをすべて削除
+	if err := r.DetachTagsFromWork(workID); err != nil {
 		return err
 	}
 
-	// 新しいタグだけを追加
+	// 新しいタグを追加
 	for _, tagID := range tagIDs {
-		exists := false
-		for _, existingID := range existingTagIDs {
-			if tagID == existingID {
-				exists = true
-				break
-			}
-		}
-
-		if !exists {
-			if err := r.db.Exec("INSERT INTO work_tags (work_id, tag_id) VALUES (?, ?)", workID, tagID).Error; err != nil {
-				return err
-			}
+		if err := r.db.Create(&models.WorkTag{WorkID: workID, TagID: tagID}).Error; err != nil {
+			return err
 		}
 	}
 
 	return nil
 }
 
-// DetachTagsFromWork 作品からタグの関連付けを解除
-func (r *tagRepository) DetachTagsFromWork(workID uint, tagIDs []uint) error {
-	if len(tagIDs) == 0 {
-		return nil
-	}
-	// ちょっと怖い
-	return r.db.Where("work_id = ? AND tag_id IN ?", workID, tagIDs).Delete(&WorkTag{}).Error
+// DetachTagsFromWork 作品からすべてのタグの関連付けを解除
+func (r *tagRepository) DetachTagsFromWork(workID uint) error {
+	return r.db.Where("work_id = ?", workID).Delete(&models.WorkTag{}).Error
 }
 
 // GetTagsForWork 作品に関連付けられたタグを取得
@@ -138,14 +121,4 @@ func (r *tagRepository) GetTagsForWork(workID uint) ([]models.Tag, error) {
 		return nil, err
 	}
 	return tags, nil
-}
-
-// WorkTag 作品とタグの中間テーブル用モデル
-type WorkTag struct {
-	WorkID uint `gorm:"primaryKey"`
-	TagID  uint `gorm:"primaryKey"`
-}
-
-func (WorkTag) TableName() string {
-	return "work_tags"
 }

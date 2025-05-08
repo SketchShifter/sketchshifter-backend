@@ -34,12 +34,10 @@ func main() {
 		// マイグレーションを実行
 		err = db.AutoMigrate(
 			&models.User{},
-			&models.ExternalAccount{},
 			&models.Tag{},
 			&models.Work{},
 			&models.Like{},
 			&models.Comment{},
-			&models.Image{},
 			&models.ProcessingWork{},
 		)
 		if err != nil {
@@ -55,9 +53,7 @@ func main() {
 			"work_tags",
 			&models.Work{},
 			&models.Tag{},
-			&models.ExternalAccount{},
 			&models.User{},
-			&models.Image{},
 			&models.ProcessingWork{},
 		)
 		if err != nil {

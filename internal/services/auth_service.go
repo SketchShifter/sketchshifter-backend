@@ -18,7 +18,6 @@ type AuthService interface {
 	Login(email, password string) (*models.User, string, error)
 	ValidateToken(tokenString string) (*Claims, error)
 	GetUserFromToken(tokenString string) (*models.User, error)
-	OAuth(provider, code string) (*models.User, string, error)
 	ChangePassword(userID uint, currentPassword, newPassword string) error
 }
 
@@ -134,76 +133,28 @@ func (s *authService) GetUserFromToken(tokenString string) (*models.User, error)
 	return user, nil
 }
 
-// OAuth OAuthログイン/登録
-func (s *authService) OAuth(provider, code string) (*models.User, string, error) {
-	// OAuthプロバイダからユーザー情報を取得（実際の実装はプロバイダに応じて異なる）
-	userInfo, err := s.getOAuthUserInfo(provider, code)
+// ChangePassword ユーザーのパスワードを変更
+func (s *authService) ChangePassword(userID uint, currentPassword, newPassword string) error {
+	// ユーザーを取得
+	user, err := s.userRepo.FindByID(userID)
 	if err != nil {
-		return nil, "", err
+		return err
 	}
 
-	// 既存のアカウントを確認
-	user, err := s.userRepo.FindByExternalAccount(provider, userInfo.ID)
-	if err == nil && user != nil {
-		// 既存ユーザーを見つけた場合はログイン処理
-		token, err := s.generateToken(user.ID)
-		if err != nil {
-			return nil, "", err
-		}
-		return user, token, nil
+	// 現在のパスワードを検証
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(currentPassword)); err != nil {
+		return errors.New("現在のパスワードが正しくありません")
 	}
 
-	// メールアドレスで既存ユーザーを確認
-	if userInfo.Email != "" {
-		existingUser, err := s.userRepo.FindByEmail(userInfo.Email)
-		if err == nil && existingUser != nil {
-			// 既存ユーザーに外部アカウントを関連付け
-			externalAccount := &models.ExternalAccount{
-				UserID:     existingUser.ID,
-				Provider:   provider,
-				ExternalID: userInfo.ID,
-			}
-			if err := s.userRepo.CreateExternalAccount(externalAccount); err != nil {
-				return nil, "", err
-			}
-
-			token, err := s.generateToken(existingUser.ID)
-			if err != nil {
-				return nil, "", err
-			}
-			return existingUser, token, nil
-		}
-	}
-
-	// 新しいユーザーを作成
-	newUser := &models.User{
-		Email:    userInfo.Email,
-		Password: "", // OAuth認証ではパスワードは不要
-		Name:     userInfo.Name,
-		Nickname: userInfo.Nickname,
-	}
-
-	if err := s.userRepo.Create(newUser); err != nil {
-		return nil, "", err
-	}
-
-	// 外部アカウントを関連付け
-	externalAccount := &models.ExternalAccount{
-		UserID:     newUser.ID,
-		Provider:   provider,
-		ExternalID: userInfo.ID,
-	}
-	if err := s.userRepo.CreateExternalAccount(externalAccount); err != nil {
-		return nil, "", err
-	}
-
-	// JWTトークンを生成
-	token, err := s.generateToken(newUser.ID)
+	// 新しいパスワードをハッシュ化
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, "", err
+		return err
 	}
 
-	return newUser, token, nil
+	// パスワードを更新
+	user.Password = string(hashedPassword)
+	return s.userRepo.Update(user)
 }
 
 // generateToken JWTトークンを生成
@@ -228,64 +179,4 @@ func (s *authService) generateToken(userID uint) (string, error) {
 	}
 
 	return tokenString, nil
-}
-
-// OAuthUserInfo OAuth認証で取得するユーザー情報
-type OAuthUserInfo struct {
-	ID       string
-	Email    string
-	Name     string
-	Nickname string
-}
-
-// getOAuthUserInfo OAuthプロバイダからユーザー情報を取得（実装例）
-func (s *authService) getOAuthUserInfo(provider, code string) (*OAuthUserInfo, error) {
-	// この部分は実際のOAuthプロバイダに応じて実装する必要があります
-	// ここでは例としてダミー実装を返します
-
-	// 実際にはここでOAuthプロバイダのトークンエンドポイントにリクエストを送り、
-	// アクセストークンを取得し、そのアクセストークンを使ってユーザー情報を取得する処理を実装します
-
-	// Googleの場合
-	if provider == "google" {
-		// TODO: Google OAuth実装
-	}
-
-	// GitHubの場合
-	if provider == "github" {
-		// TODO: GitHub OAuth実装
-	}
-
-	// ダミー実装
-	return &OAuthUserInfo{
-		ID:       "dummy_id",
-		Email:    "dummy@example.com",
-		Name:     "Dummy User",
-		Nickname: "dummy",
-	}, nil
-}
-
-// auth_service.go に追加する実装
-// ChangePassword ユーザーのパスワードを変更
-func (s *authService) ChangePassword(userID uint, currentPassword, newPassword string) error {
-	// ユーザーを取得
-	user, err := s.userRepo.FindByID(userID)
-	if err != nil {
-		return err
-	}
-
-	// 現在のパスワードを検証
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(currentPassword)); err != nil {
-		return errors.New("現在のパスワードが正しくありません")
-	}
-
-	// 新しいパスワードをハッシュ化
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-
-	// パスワードを更新
-	user.Password = string(hashedPassword)
-	return s.userRepo.Update(user)
 }

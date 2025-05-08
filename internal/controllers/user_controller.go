@@ -28,6 +28,13 @@ type UserResponse struct {
 	User interface{} `json:"user"`
 }
 
+// UserUpdateRequest ユーザープロフィール更新リクエスト
+type UserUpdateRequest struct {
+	Name     string `json:"name"`
+	Nickname string `json:"nickname"`
+	Bio      string `json:"bio"`
+}
+
 // GetByID IDでユーザーを取得
 func (c *UserController) GetByID(ctx *gin.Context) {
 	// IDを解析
@@ -82,11 +89,11 @@ func (c *UserController) GetUserWorks(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, WorksResponse{
-		Works: works,
-		Total: total,
-		Pages: pages,
-		Page:  page,
+	ctx.JSON(http.StatusOK, gin.H{
+		"works": works,
+		"total": total,
+		"pages": pages,
+		"page":  page,
 	})
 }
 
@@ -122,21 +129,12 @@ func (c *UserController) GetUserFavorites(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, WorksResponse{
-		Works: works,
-		Total: total,
-		Pages: pages,
-		Page:  page,
+	ctx.JSON(http.StatusOK, gin.H{
+		"works": works,
+		"total": total,
+		"pages": pages,
+		"page":  page,
 	})
-}
-
-// user_controller.go に追加する部分
-
-// UserUpdateRequest ユーザープロフィール更新リクエスト
-type UserUpdateRequest struct {
-	Name     string `json:"name"`
-	Nickname string `json:"nickname"`
-	Bio      string `json:"bio"`
 }
 
 // GetMe 自分のユーザー情報を取得
@@ -210,10 +208,10 @@ func (c *UserController) GetMyWorks(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, WorksResponse{
-		Works: works,
-		Total: total,
-		Pages: pages,
-		Page:  page,
+	ctx.JSON(http.StatusOK, gin.H{
+		"works": works,
+		"total": total,
+		"pages": pages,
+		"page":  page,
 	})
 }

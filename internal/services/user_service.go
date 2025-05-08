@@ -8,7 +8,6 @@ import (
 )
 
 // UserService ユーザーに関するサービスインターフェース
-// user_service.go のインターフェース更新
 type UserService interface {
 	GetByID(id uint) (*models.User, error)
 	GetUserWorks(userID uint, page, limit int) ([]models.Work, int64, int, error)
@@ -81,7 +80,6 @@ func (s *userService) GetUserFavorites(userID uint, page, limit int) ([]models.W
 	return works, total, pages, nil
 }
 
-// user_service.go に追加する実装
 // UpdateProfile ユーザープロフィールを更新
 func (s *userService) UpdateProfile(userID uint, name, nickname, bio string) (*models.User, error) {
 	// ユーザーを取得

@@ -2,7 +2,6 @@ package repository
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/SketchShifter/sketchshifter_backend/internal/models"
 
@@ -22,6 +21,8 @@ type WorkRepository interface {
 	GetLikesCount(workID uint) (int, error)
 	HasLiked(userID, workID uint) (bool, error)
 	ListByUser(userID uint, page, limit int) ([]models.Work, int64, error)
+	GetFileData(id uint) ([]byte, string, string, error)
+	GetThumbnailData(id uint) ([]byte, string, error)
 }
 
 // workRepository WorkRepositoryの実装
@@ -43,9 +44,6 @@ func (r *workRepository) Create(work *models.Work) error {
 func (r *workRepository) FindByID(id uint) (*models.Work, error) {
 	var work models.Work
 	if err := r.db.Preload("User").Preload("Tags").First(&work, id).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("作品が見つかりません: ID=%d", id)
-		}
 		return nil, err
 	}
 
@@ -78,7 +76,6 @@ func (r *workRepository) List(page, limit int, search, tag string, userID *uint,
 
 	offset := (page - 1) * limit
 
-	// クエリビルダーを初期化
 	query := r.db.Model(&models.Work{}).Preload("User").Preload("Tags")
 
 	// 検索条件を適用
@@ -106,13 +103,10 @@ func (r *workRepository) List(page, limit int, search, tag string, userID *uint,
 	// ソート順を適用
 	switch sort {
 	case "popular":
-		// 人気順（閲覧数とお気に入り数の組み合わせでソート）
-		query = query.Order("views DESC")
-	case "views":
-		// 閲覧数順
-		query = query.Order("views DESC")
-	default:
-		// 新着順
+		query = query.Order("views DESC, likes_count DESC")
+	case "likes":
+		query = query.Order("likes_count DESC")
+	default: // "newest"
 		query = query.Order("created_at DESC")
 	}
 
@@ -135,23 +129,6 @@ func (r *workRepository) List(page, limit int, search, tag string, userID *uint,
 
 // AddLike いいねを追加
 func (r *workRepository) AddLike(userID, workID uint) error {
-	// 作品の存在確認
-	var work models.Work
-	if err := r.db.First(&work, workID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("作品が見つかりません: ID=%d", workID)
-		}
-		return err
-	}
-
-	// すでにいいねしているか確認
-	var count int64
-	r.db.Model(&models.Like{}).Where("user_id = ? AND work_id = ?", userID, workID).Count(&count)
-	if count > 0 {
-		return errors.New("既にいいねしています")
-	}
-
-	// いいねを作成
 	like := models.Like{
 		UserID: userID,
 		WorkID: workID,
@@ -161,22 +138,7 @@ func (r *workRepository) AddLike(userID, workID uint) error {
 
 // RemoveLike いいねを削除
 func (r *workRepository) RemoveLike(userID, workID uint) error {
-	// 作品の存在確認
-	var work models.Work
-	if err := r.db.First(&work, workID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("作品が見つかりません: ID=%d", workID)
-		}
-		return err
-	}
-
-	// いいねを削除
-	result := r.db.Where("user_id = ? AND work_id = ?", userID, workID).Delete(&models.Like{})
-	if result.RowsAffected == 0 {
-		return errors.New("いいねが見つかりません")
-	}
-
-	return result.Error
+	return r.db.Where("user_id = ? AND work_id = ?", userID, workID).Delete(&models.Like{}).Error
 }
 
 // GetLikesCount いいね数を取得
@@ -204,16 +166,6 @@ func (r *workRepository) ListByUser(userID uint, page, limit int) ([]models.Work
 
 	offset := (page - 1) * limit
 
-	// ユーザーの存在確認
-	var userCount int64
-	if err := r.db.Model(&models.User{}).Where("id = ?", userID).Count(&userCount).Error; err != nil {
-		return nil, 0, err
-	}
-	if userCount == 0 {
-		return nil, 0, fmt.Errorf("ユーザーが見つかりません: ID=%d", userID)
-	}
-
-	// クエリを作成
 	query := r.db.Model(&models.Work{}).
 		Where("user_id = ?", userID).
 		Preload("User").
@@ -240,4 +192,30 @@ func (r *workRepository) ListByUser(userID uint, page, limit int) ([]models.Work
 	}
 
 	return works, total, nil
+}
+
+// GetFileData ファイルデータを取得
+func (r *workRepository) GetFileData(id uint) ([]byte, string, string, error) {
+	var work models.Work
+
+	// ファイルデータを取得 (BLOB形式)
+	if err := r.db.Select("file_data", "file_type", "file_name").First(&work, id).Error; err != nil {
+		return nil, "", "", err
+	}
+
+	// ファイルデータが空かチェック
+	if len(work.FileData) == 0 {
+		return nil, "", "", errors.New("ファイルデータが存在しません")
+	}
+
+	return work.FileData, work.FileType, work.FileName, nil
+}
+
+// GetThumbnailData サムネイルデータを取得
+func (r *workRepository) GetThumbnailData(id uint) ([]byte, string, error) {
+	var work models.Work
+	if err := r.db.Select("thumbnail_data", "thumbnail_type").First(&work, id).Error; err != nil {
+		return nil, "", err
+	}
+	return work.ThumbnailData, work.ThumbnailType, nil
 }

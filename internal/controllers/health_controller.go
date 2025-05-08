@@ -2,21 +2,20 @@ package controllers
 
 import (
 	"net/http"
-
-	"github.com/SketchShifter/sketchshifter_backend/internal/services"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
 // HealthController ヘルスチェックに関するコントローラー
 type HealthController struct {
-	healthService services.HealthService
+	startTime time.Time
 }
 
 // NewHealthController HealthControllerを作成
-func NewHealthController(healthService services.HealthService) *HealthController {
+func NewHealthController() *HealthController {
 	return &HealthController{
-		healthService: healthService,
+		startTime: time.Now(),
 	}
 }
 
@@ -30,7 +29,9 @@ type HealthStatus struct {
 
 // Check ヘルスチェック
 func (c *HealthController) Check(ctx *gin.Context) {
-	status, uptime, timestamp := c.healthService.GetStatus()
+	status := "ok"
+	uptime := time.Since(c.startTime).String()
+	timestamp := time.Now().Format(time.RFC3339)
 
 	healthStatus := &HealthStatus{
 		Status:    status,

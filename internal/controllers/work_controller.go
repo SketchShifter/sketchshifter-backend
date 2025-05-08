@@ -24,29 +24,6 @@ func NewWorkController(workService services.WorkService) *WorkController {
 	}
 }
 
-// WorkResponse 作品レスポンス
-type WorkResponse struct {
-	Work interface{} `json:"work"`
-}
-
-// WorksResponse 作品一覧レスポンス
-type WorksResponse struct {
-	Works []models.Work `json:"works"`
-	Total int64         `json:"total"`
-	Pages int           `json:"pages"`
-	Page  int           `json:"page"`
-}
-
-// LikeResponse いいねレスポンス
-type LikeResponse struct {
-	LikesCount int `json:"likes_count"`
-}
-
-// PreviewResponse プレビューレスポンス
-// type PreviewResponse struct {
-// 	PreviewURL string `json:"preview_url"`
-// }
-
 // Create 新しい作品を作成
 func (c *WorkController) Create(ctx *gin.Context) {
 	// マルチパートフォームを解析
@@ -64,6 +41,15 @@ func (c *WorkController) Create(ctx *gin.Context) {
 	isGuestStr := ctx.DefaultPostForm("is_guest", "false")
 	guestNickname := ctx.PostForm("guest_nickname")
 
+	// Cloudinaryから取得したURLとpublic_id（フロントエンドアップロード用）
+	fileURL := ctx.PostForm("file_url")
+	filePublicID := ctx.PostForm("file_public_id")
+	fileType := ctx.PostForm("file_type")
+	fileName := ctx.PostForm("file_name")
+	thumbnailURL := ctx.PostForm("thumbnail_url")
+	thumbnailPublicID := ctx.PostForm("thumbnail_public_id")
+	thumbnailType := ctx.PostForm("thumbnail_type")
+
 	// タグを解析
 	var tags []string
 	if tagsStr != "" {
@@ -77,20 +63,21 @@ func (c *WorkController) Create(ctx *gin.Context) {
 	codeShared := codeSharedStr == "true" || codeSharedStr == "1"
 	isGuest := isGuestStr == "true" || isGuestStr == "1"
 
-	// ファイルを取得
-	file, fileHeader, err := ctx.Request.FormFile("file")
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ファイルが必要です"})
-		return
-	}
-	defer file.Close()
-
-	// サムネイルを取得（オプション）
+	// ファイル情報の変数準備
+	var file multipart.File
+	var fileHeader *multipart.FileHeader
 	var thumbnail multipart.File
 	var thumbnailHeader *multipart.FileHeader
-	thumbnail, thumbnailHeader, err = ctx.Request.FormFile("thumbnail")
-	if err == nil && thumbnail != nil {
-		defer thumbnail.Close()
+	var err error
+
+	// Cloudinaryを使わずPDEファイルをアップロードする場合のみファイルを取得
+	if fileURL == "" {
+		file, fileHeader, err = ctx.Request.FormFile("file")
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "ファイルが必要です"})
+			return
+		}
+		defer file.Close()
 	}
 
 	// ユーザー情報を取得
@@ -106,13 +93,20 @@ func (c *WorkController) Create(ctx *gin.Context) {
 	}
 
 	// 作品を作成
-	work, err := c.workService.Create(
+	work, err := c.workService.CreateWithCloudinary(
 		title,
 		description,
 		file,
 		thumbnail,
 		fileHeader,
 		thumbnailHeader,
+		fileURL,
+		filePublicID,
+		fileType,
+		fileName,
+		thumbnailURL,
+		thumbnailPublicID,
+		thumbnailType,
 		codeShared,
 		codeContent,
 		tags,
@@ -125,10 +119,10 @@ func (c *WorkController) Create(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusCreated, WorkResponse{Work: work})
+	ctx.JSON(http.StatusCreated, gin.H{"work": work})
 }
 
-// GetByID IDで作品を取得
+// GetByID IDで作品を取得（processingデータを含める修正版）
 func (c *WorkController) GetByID(ctx *gin.Context) {
 	// IDを解析
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
@@ -144,7 +138,19 @@ func (c *WorkController) GetByID(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, WorkResponse{Work: work})
+	// Processing作品データを取得（PDEファイルの場合）
+	var processingWork *models.ProcessingWork
+	if strings.HasSuffix(work.FileName, ".pde") || work.FileType == "text/plain" {
+		processingWork, _ = c.workService.GetProcessingWorkByWorkID(work.ID)
+	}
+
+	// レスポンスを作成
+	response := gin.H{"work": work}
+	if processingWork != nil {
+		response["processing_work"] = processingWork
+	}
+
+	ctx.JSON(http.StatusOK, response)
 }
 
 // Update 作品を更新
@@ -177,6 +183,15 @@ func (c *WorkController) Update(ctx *gin.Context) {
 	codeContent := ctx.PostForm("code_content")
 	tagsStr := ctx.PostForm("tags")
 
+	// Cloudinaryから取得したURLとpublic_id（フロントエンドアップロード用）
+	fileURL := ctx.PostForm("file_url")
+	filePublicID := ctx.PostForm("file_public_id")
+	fileType := ctx.PostForm("file_type")
+	fileName := ctx.PostForm("file_name")
+	thumbnailURL := ctx.PostForm("thumbnail_url")
+	thumbnailPublicID := ctx.PostForm("thumbnail_public_id")
+	thumbnailType := ctx.PostForm("thumbnail_type")
+
 	// タグを解析
 	var tags []string
 	if tagsStr != "" {
@@ -192,33 +207,54 @@ func (c *WorkController) Update(ctx *gin.Context) {
 	// ファイルを取得（オプション）
 	var file multipart.File
 	var fileHeader *multipart.FileHeader
-	file, fileHeader, err = ctx.Request.FormFile("file")
-	if err == nil && file != nil {
-		defer file.Close()
-	}
-
-	// サムネイルを取得（オプション）
-	var thumbnail multipart.File
-	var thumbnailHeader *multipart.FileHeader
-	thumbnail, thumbnailHeader, err = ctx.Request.FormFile("thumbnail")
-	if err == nil && thumbnail != nil {
-		defer thumbnail.Close()
+	if fileURL == "" {
+		file, fileHeader, err = ctx.Request.FormFile("file")
+		if err == nil && file != nil {
+			defer file.Close()
+		}
 	}
 
 	// 作品を更新
-	work, err := c.workService.Update(
-		uint(id),
-		title,
-		description,
-		file,
-		thumbnail,
-		fileHeader,
-		thumbnailHeader,
-		codeShared,
-		codeContent,
-		tags,
-		u.ID,
-	)
+	var work *models.Work
+	if fileURL != "" || thumbnailURL != "" {
+		// Cloudinaryデータがある場合
+		work, err = c.workService.UpdateWithCloudinary(
+			uint(id),
+			title,
+			description,
+			file,
+			nil, // thumbnail は直接アップロードしない
+			fileHeader,
+			nil, // thumbnailHeader は直接アップロードしない
+			fileURL,
+			filePublicID,
+			fileType,
+			fileName,
+			thumbnailURL,
+			thumbnailPublicID,
+			thumbnailType,
+			codeShared,
+			codeContent,
+			tags,
+			u.ID,
+		)
+	} else {
+		// 従来の更新方法
+		work, err = c.workService.Update(
+			uint(id),
+			title,
+			description,
+			file,
+			nil, // thumbnail は直接アップロードしない
+			fileHeader,
+			nil, // thumbnailHeader は直接アップロードしない
+			codeShared,
+			codeContent,
+			tags,
+			u.ID,
+		)
+	}
+
 	if err != nil {
 		if strings.Contains(err.Error(), "権限がありません") {
 			ctx.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
@@ -232,7 +268,7 @@ func (c *WorkController) Update(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, WorkResponse{Work: work})
+	ctx.JSON(http.StatusOK, gin.H{"work": work})
 }
 
 // Delete 作品を削除
@@ -307,12 +343,39 @@ func (c *WorkController) List(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, WorksResponse{
-		Works: works,
-		Total: total,
-		Pages: pages,
-		Page:  page,
+	ctx.JSON(http.StatusOK, gin.H{
+		"works": works,
+		"total": total,
+		"pages": pages,
+		"page":  page,
 	})
+}
+
+// HasLiked ユーザーがいいねしているか確認
+func (c *WorkController) HasLiked(ctx *gin.Context) {
+	// IDを解析
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "無効なIDです"})
+		return
+	}
+
+	// ユーザー情報を取得
+	user, exists := ctx.Get("user")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "認証が必要です"})
+		return
+	}
+	u := user.(*models.User)
+
+	// いいね状態を確認
+	liked, err := c.workService.HasLiked(u.ID, uint(id))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"liked": liked})
 }
 
 // AddLike いいねを追加
@@ -343,8 +406,8 @@ func (c *WorkController) AddLike(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, LikeResponse{
-		LikesCount: likesCount,
+	ctx.JSON(http.StatusOK, gin.H{
+		"likes_count": likesCount,
 	})
 }
 
@@ -376,9 +439,83 @@ func (c *WorkController) RemoveLike(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, LikeResponse{
-		LikesCount: likesCount,
+	ctx.JSON(http.StatusOK, gin.H{
+		"likes_count": likesCount,
 	})
+}
+
+// GetFile ファイルデータを取得
+func (c *WorkController) GetFile(ctx *gin.Context) {
+	// IDを解析
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "無効なIDです"})
+		return
+	}
+
+	// 作品情報を取得
+	work, err := c.workService.GetByID(uint(id))
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "作品が見つかりません"})
+		return
+	}
+
+	// Cloudinaryの場合はリダイレクト
+	if work.FileURL != "" {
+		ctx.Redirect(http.StatusFound, work.FileURL)
+		return
+	}
+
+	// 従来のDB保存ファイル取得（互換性のため）
+	fileData, contentType, _, err := c.workService.GetFileData(uint(id))
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "ファイルが見つかりません"})
+		return
+	}
+
+	ctx.Header("Content-Type", contentType)
+	ctx.Header("Cache-Control", "public, max-age=86400") // キャッシュ設定
+	ctx.Data(http.StatusOK, contentType, fileData)
+}
+
+// GetThumbnail サムネイルデータを取得
+func (c *WorkController) GetThumbnail(ctx *gin.Context) {
+	// IDを解析
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "無効なIDです"})
+		return
+	}
+
+	// 作品情報を取得
+	work, err := c.workService.GetByID(uint(id))
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "作品が見つかりません"})
+		return
+	}
+
+	// Cloudinaryの場合はリダイレクト
+	if work.ThumbnailURL != "" {
+		ctx.Redirect(http.StatusFound, work.ThumbnailURL)
+		return
+	}
+
+	// 従来のDB保存サムネイル取得（互換性のため）
+	thumbnailData, contentType, err := c.workService.GetThumbnailData(uint(id))
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "サムネイルが見つかりません"})
+		return
+	}
+
+	// サムネイルデータがない場合
+	if len(thumbnailData) == 0 {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "サムネイルが設定されていません"})
+		return
+	}
+
+	ctx.Header("Content-Type", contentType)
+	ctx.Header("Cache-Control", "public, max-age=86400") // キャッシュ設定
+	ctx.Data(http.StatusOK, contentType, thumbnailData)
 }
 
 // CreatePreview プレビューを作成
@@ -390,10 +527,10 @@ func (c *WorkController) CreatePreview(ctx *gin.Context) {
 	}
 
 	// ファイルまたはコードを取得
-	file, fileHeader, _ := ctx.Request.FormFile("file")
+	file, fileHeader, err := ctx.Request.FormFile("file")
 	code := ctx.PostForm("code")
 
-	if (file == nil || fileHeader == nil) && code == "" {
+	if (err != nil || file == nil) && code == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "ファイルまたはコードが必要です"})
 		return
 	}
@@ -403,13 +540,12 @@ func (c *WorkController) CreatePreview(ctx *gin.Context) {
 	}
 
 	// プレビューを作成
-	previewURL, err := c.workService.CreatePreview(file, fileHeader, code)
+	previewData, contentType, err := c.workService.CreatePreview(file, fileHeader, code)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, PreviewResponse{
-		PreviewURL: previewURL,
-	})
+	// プレビューデータを返す
+	ctx.Data(http.StatusOK, contentType, previewData)
 }

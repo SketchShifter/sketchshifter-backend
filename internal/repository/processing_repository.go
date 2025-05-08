@@ -13,11 +13,9 @@ type ProcessingRepository interface {
 	Update(processing *models.ProcessingWork) error
 	Delete(id uint) error
 	FindByWorkID(workID uint) (*models.ProcessingWork, error)
-	UpdateStatus(id uint, status string, jsPath string, errorMessage string) error
+	UpdateStatus(id uint, status string, jsContent string, errorMessage string) error
 	GetPDEContent(id uint) (string, error)
-	// バッチ処理用の追加メソッド
-	ListPendingProcessings(limit int) ([]models.ProcessingWork, error)
-	CountPendingProcessings() (int64, error)
+	ListPending(limit int) ([]models.ProcessingWork, error)
 }
 
 // processingRepository ProcessingRepositoryの実装
@@ -67,13 +65,13 @@ func (r *processingRepository) FindByWorkID(workID uint) (*models.ProcessingWork
 }
 
 // UpdateStatus Processing作品のステータスを更新
-func (r *processingRepository) UpdateStatus(id uint, status string, jsPath string, errorMessage string) error {
+func (r *processingRepository) UpdateStatus(id uint, status string, jsContent string, errorMessage string) error {
 	updates := map[string]interface{}{
 		"status": status,
 	}
 
-	if jsPath != "" {
-		updates["js_path"] = jsPath
+	if jsContent != "" {
+		updates["js_content"] = jsContent
 	}
 
 	if errorMessage != "" {
@@ -94,8 +92,8 @@ func (r *processingRepository) GetPDEContent(id uint) (string, error) {
 	return processing.PDEContent, nil
 }
 
-// ListPendingProcessings 未処理のProcessing作品リストを取得
-func (r *processingRepository) ListPendingProcessings(limit int) ([]models.ProcessingWork, error) {
+// ListPending 未処理のProcessing作品リストを取得
+func (r *processingRepository) ListPending(limit int) ([]models.ProcessingWork, error) {
 	var processings []models.ProcessingWork
 
 	if err := r.db.Where("status = ?", "pending").
@@ -106,16 +104,4 @@ func (r *processingRepository) ListPendingProcessings(limit int) ([]models.Proce
 	}
 
 	return processings, nil
-}
-
-// CountPendingProcessings 未処理のProcessing作品数をカウント
-func (r *processingRepository) CountPendingProcessings() (int64, error) {
-	var count int64
-	if err := r.db.Model(&models.ProcessingWork{}).
-		Where("status = ?", "pending").
-		Count(&count).Error; err != nil {
-		return 0, err
-	}
-
-	return count, nil
 }

@@ -13,8 +13,6 @@ type UserRepository interface {
 	Create(user *models.User) error
 	FindByID(id uint) (*models.User, error)
 	FindByEmail(email string) (*models.User, error)
-	FindByExternalAccount(provider, externalID string) (*models.User, error)
-	CreateExternalAccount(account *models.ExternalAccount) error
 	Update(user *models.User) error
 	Delete(id uint) error
 	GetUserFavorites(userID uint, page, limit int) ([]models.Work, int64, error)
@@ -51,26 +49,6 @@ func (r *userRepository) FindByEmail(email string) (*models.User, error) {
 		return nil, err
 	}
 	return &user, nil
-}
-
-// FindByExternalAccount 外部認証情報でユーザーを検索
-func (r *userRepository) FindByExternalAccount(provider, externalID string) (*models.User, error) {
-	var account models.ExternalAccount
-	if err := r.db.Where("provider = ? AND external_id = ?", provider, externalID).First(&account).Error; err != nil {
-		return nil, err
-	}
-
-	var user models.User
-	if err := r.db.First(&user, account.UserID).Error; err != nil {
-		return nil, err
-	}
-
-	return &user, nil
-}
-
-// CreateExternalAccount 外部認証アカウントを作成
-func (r *userRepository) CreateExternalAccount(account *models.ExternalAccount) error {
-	return r.db.Create(account).Error
 }
 
 // Update ユーザー情報を更新

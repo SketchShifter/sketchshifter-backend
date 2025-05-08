@@ -56,7 +56,7 @@ func (c *LambdaController) ProcessPDE(ctx *gin.Context) {
 	// 成功レスポンス
 	ctx.JSON(http.StatusOK, gin.H{
 		"success":      true,
-		"message":      "PDE変換処理が完了しました",
+		"message":      "PDE変換処理が開始されました",
 		"processingId": processingID,
 	})
 }

@@ -1,7 +1,7 @@
 package routes
 
 import (
-	"path/filepath"
+	"log"
 
 	"github.com/SketchShifter/sketchshifter_backend/internal/config"
 	"github.com/SketchShifter/sketchshifter_backend/internal/controllers"
@@ -22,13 +22,6 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	r.Use(middlewares.ErrorMiddleware())
 	r.Use(middlewares.CORSMiddleware())
 
-	// 静的ファイル提供の設定
-	r.Static("/uploads", cfg.Storage.UploadDir)
-
-	// 直接assetsディレクトリを公開
-	assetsDir := filepath.Join(cfg.Storage.UploadDir, "assets")
-	r.Static("/assets", assetsDir)
-
 	// リポジトリを作成
 	userRepo := repository.NewUserRepository(db)
 	workRepo := repository.NewWorkRepository(db)
@@ -36,22 +29,27 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	commentRepo := repository.NewCommentRepository(db)
 	processingRepo := repository.NewProcessingRepository(db)
 
+	// Lambda関連のサービスを作成
+	lambdaService := services.NewLambdaService(cfg, processingRepo)
+
+	// Cloudinaryサービスを作成
+	cloudinaryService, err := services.NewCloudinaryService(cfg)
+	if err != nil {
+		log.Fatalf("Cloudinaryサービスの初期化に失敗しました: %v", err)
+	}
+
 	// サービスを作成
 	authService := services.NewAuthService(userRepo, cfg)
-	fileService := services.NewFileService(cfg)
-	lambdaService := services.NewLambdaService(cfg, processingRepo)
 	workService := services.NewWorkService(
 		workRepo,
 		tagRepo,
 		processingRepo,
-		cfg,
-		fileService,
 		lambdaService,
+		cloudinaryService, // 追加
 	)
 	tagService := services.NewTagService(tagRepo)
 	commentService := services.NewCommentService(commentRepo, workRepo)
 	userService := services.NewUserService(userRepo, workRepo)
-	healthService := services.NewHealthService()
 
 	// コントローラーを作成
 	authController := controllers.NewAuthController(authService)
@@ -59,22 +57,8 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	tagController := controllers.NewTagController(tagService)
 	commentController := controllers.NewCommentController(commentService)
 	userController := controllers.NewUserController(userService)
-	healthController := controllers.NewHealthController(healthService)
+	healthController := controllers.NewHealthController()
 	lambdaController := controllers.NewLambdaController(lambdaService)
-
-	// 新しい専用コントローラーを作成
-	uploadController := controllers.NewUploadController(
-		cfg.Storage.UploadDir,
-		cfg.CloudflareWorker.URL,
-		cfg.CloudflareWorker.APIKey,
-		cfg.CloudflareWorker.Bucket,
-	)
-
-	previewController := controllers.NewPreviewController(
-		cfg.Storage.UploadDir,
-		cfg.AWS.LambdaEndpoint,
-		"/uploads/preview",
-	)
 
 	// 認証ミドルウェア
 	authMiddleware := middlewares.AuthMiddleware(authService)
@@ -91,7 +75,6 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 		{
 			auth.POST("/register", authController.Register)
 			auth.POST("/login", authController.Login)
-			auth.POST("/oauth", authController.OAuth)
 			auth.GET("/me", authMiddleware, authController.GetMe)
 			auth.POST("/change-password", authMiddleware, authController.ChangePassword)
 		}
@@ -102,12 +85,16 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 			// 認証不要
 			works.GET("", optionalAuthMiddleware, workController.List)
 			works.GET("/:id", optionalAuthMiddleware, workController.GetByID)
+			works.GET("/:id/file", workController.GetFile)
+			works.GET("/:id/thumbnail", workController.GetThumbnail)
+			works.POST("/preview", workController.CreatePreview)
 
 			// コメント関連
 			works.GET("/:id/comments", commentController.List)
 			works.POST("/:id/comments", optionalAuthMiddleware, commentController.Create)
 
 			// 認証が必要
+			works.GET("/:id/liked", authMiddleware, workController.HasLiked)
 			works.POST("", authMiddleware, workController.Create)
 			works.PUT("/:id", authMiddleware, workController.Update)
 			works.DELETE("/:id", authMiddleware, workController.Delete)
@@ -115,20 +102,11 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 			works.DELETE("/:id/like", authMiddleware, workController.RemoveLike)
 		}
 
-		// ファイルアップロード（新しいコントローラーを使用）
-		api.POST("/upload", uploadController.UploadFile)
-
-		// プレビュー生成（新しいコントローラーを使用）
-		api.POST("/preview", previewController.CreatePreview)
-
 		// Lambda関連ルート（デバッグ・管理用）
 		lambda := api.Group("/lambda")
 		{
-			// 手動変換起動用
-			lambda.POST("/process/:id", lambdaController.ProcessPDE)
-
-			// プレビュー用
-			lambda.POST("/preview", previewController.CreatePreview)
+			// 手動変換起動（デバッグ用）
+			lambda.POST("/process/:id", authMiddleware, lambdaController.ProcessPDE)
 		}
 
 		// コメントルート
