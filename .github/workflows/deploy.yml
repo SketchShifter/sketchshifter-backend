@@ -3,6 +3,9 @@ name: Build and Deploy to EC2
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
 
 jobs:
   build-and-deploy:
@@ -16,7 +19,8 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: '1.18'
-          
+          cache: true
+        
       - name: Install dependencies
         run: |
           go mod download
@@ -24,68 +28,99 @@ jobs:
       
       - name: Build application
         run: |
-          CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o app ./cmd/app/main.go
-
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o app ./cmd/app/main.go
+          
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-northeast-1
-
-      - name: Update Security Group
-        run: |
-          # GitHubのMetaエンドポイントからIPレンジを取得
-          GITHUB_IP_RANGES=$(curl -s https://api.github.com/meta | jq -r '.actions[]')
-          
-          # セキュリティグループIDを設定
-          SECURITY_GROUP_ID="${{ secrets.EC2_SECURITY_GROUP_ID }}"
-          
-          # 現在のGitHub Actions関連のインバウンドルールを削除
-          CURRENT_RULES=$(aws ec2 describe-security-groups --group-ids $SECURITY_GROUP_ID --query "SecurityGroups[0].IpPermissions[?FromPort==\`22\` && ToPort==\`22\`].IpRanges[].CidrIp" --output json)
-          
-          echo "Current SSH rules: $CURRENT_RULES"
-          
-          # GitHub Actions関連のルールを削除する代わりに、すべてのルールをそのままにして新しいルールを追加
-          # 必要に応じて古いルールを削除したい場合は、ルール特定のためのタグ付けなどが必要
-          
-          # 新しいGitHubのIPレンジを追加
-          for ip_range in $GITHUB_IP_RANGES; do
-            echo "Adding GitHub Actions IP range: $ip_range"
-            
-            # descriptionは別のパラメータ形式で指定する必要がある
-            aws ec2 authorize-security-group-ingress \
-              --group-id $SECURITY_GROUP_ID \
-              --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=$ip_range,Description='GitHub-Actions'}]" || echo "Rule may already exist for $ip_range"
-          done
-        shell: /usr/bin/bash -e {0}
-        env:
-          AWS_DEFAULT_REGION: ap-northeast-1
-          AWS_REGION: ap-northeast-1
+          aws-region: ${{ secrets.AWS_REGION }}
       
-          
-      - name: Setup SSH
+      - name: Deploy to EC2 via SSM
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.HOST_NAME }} >> ~/.ssh/known_hosts
-      
-      - name: Deploy to EC2
-        run: |
-          # アプリケーションディレクトリの確認
-          ssh ${{ secrets.USER_NAME }}@${{ secrets.HOST_NAME }} "mkdir -p ${{ secrets.APP_DIRECTORY }} ${{ secrets.APP_DIRECTORY }}/uploads"
+          # 現在の日時を取得（ユニークなデプロイIDとして使用）
+          DEPLOY_ID=$(date +%Y%m%d%H%M%S)
+          echo "Starting deployment $DEPLOY_ID"
           
-          # 必要なファイルをコピー
-          scp app ${{ secrets.USER_NAME }}@${{ secrets.HOST_NAME }}:${{ secrets.APP_DIRECTORY }}/
-          scp docker-compose.yml ${{ secrets.USER_NAME }}@${{ secrets.HOST_NAME }}:${{ secrets.APP_DIRECTORY }}/
-          scp Dockerfile ${{ secrets.USER_NAME }}@${{ secrets.HOST_NAME }}:${{ secrets.APP_DIRECTORY }}/
+          # S3にデプロイファイルをアップロード
+          aws s3 cp app s3://${{ secrets.S3_BUCKET_NAME }}/deploy/app-$DEPLOY_ID
+          aws s3 cp docker-compose.yml s3://${{ secrets.S3_BUCKET_NAME }}/deploy/docker-compose.yml-$DEPLOY_ID
+          aws s3 cp Dockerfile s3://${{ secrets.S3_BUCKET_NAME }}/deploy/Dockerfile-$DEPLOY_ID
           
-          # 既存の.envファイルがない場合は.env.exampleをコピー
-          # ssh ${{ secrets.USER_NAME }}@${{ secrets.HOST_NAME }} "if [ ! -f ${{ secrets.APP_DIRECTORY }}/.env ]; then cp ${{ secrets.APP_DIRECTORY }}/.env.example ${{ secrets.APP_DIRECTORY }}/.env; fi"
+          # 環境変数ファイルを作成
+          echo "${{ secrets.ENV_FILE }}" > env_file.txt
+          aws s3 cp env_file.txt s3://${{ secrets.S3_BUCKET_NAME }}/deploy/.env-$DEPLOY_ID
           
-          # 環境変数ファイルを転送
-          # echo "${{ secrets.ENV_FILE }}" | ssh ${{ secrets.USER_NAME }}@${{ secrets.HOST_NAME }} "cat > ${{ secrets.APP_DIRECTORY }}/.env"
+          # デプロイスクリプトを作成してS3にアップロード
+          cat > deploy.sh << 'EOF'
+          #!/bin/bash
+          set -e
           
-          # デプロイの実行
-          ssh ${{ secrets.USER_NAME }}@${{ secrets.HOST_NAME }} "cd ${{ secrets.APP_DIRECTORY }} && docker-compose down && docker-compose up -d"
+          # 引数からデプロイIDを取得
+          DEPLOY_ID=$1
+          APP_DIR=$2
+          S3_BUCKET=$3
+          
+          echo "Starting deployment process for $DEPLOY_ID to $APP_DIR"
+          
+          # アプリケーションディレクトリの作成
+          mkdir -p $APP_DIR/uploads
+          chmod 755 $APP_DIR/uploads
+          cd $APP_DIR
+          
+          # S3からファイルをダウンロード
+          aws s3 cp s3://$S3_BUCKET/deploy/app-$DEPLOY_ID app
+          aws s3 cp s3://$S3_BUCKET/deploy/docker-compose.yml-$DEPLOY_ID docker-compose.yml
+          aws s3 cp s3://$S3_BUCKET/deploy/Dockerfile-$DEPLOY_ID Dockerfile
+          aws s3 cp s3://$S3_BUCKET/deploy/.env-$DEPLOY_ID .env
+          
+          # 実行権限を設定
+          chmod +x app
+          
+          # Dockerコンテナの再起動
+          echo "Stopping existing containers..."
+          docker-compose down || true
+          
+          echo "Starting new containers..."
+          docker-compose up -d
+          
+          # デプロイ確認
+          echo "Waiting for container to start..."
+          sleep 10
+          
+          echo "Container status:"
+          docker ps | grep processing-api
+          
+          echo "Container logs (last 10 lines):"
+          docker logs processing-api --tail 10
+          
+          echo "Cleaning up temporary files from S3..."
+          aws s3 rm s3://$S3_BUCKET/deploy/app-$DEPLOY_ID
+          aws s3 rm s3://$S3_BUCKET/deploy/docker-compose.yml-$DEPLOY_ID
+          aws s3 rm s3://$S3_BUCKET/deploy/Dockerfile-$DEPLOY_ID
+          aws s3 rm s3://$S3_BUCKET/deploy/.env-$DEPLOY_ID
+          
+          echo "Deployment completed successfully!"
+          EOF
+          
+          chmod +x deploy.sh
+          aws s3 cp deploy.sh s3://${{ secrets.S3_BUCKET_NAME }}/deploy/deploy-$DEPLOY_ID.sh
+          
+          # SSMを使用してコマンドを実行
+          aws ssm send-command \
+            --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
+            --document-name "AWS-RunShellScript" \
+            --parameters commands=[
+              "cd /tmp",
+              "aws s3 cp s3://${{ secrets.S3_BUCKET_NAME }}/deploy/deploy-$DEPLOY_ID.sh .",
+              "chmod +x deploy-$DEPLOY_ID.sh",
+              "./deploy-$DEPLOY_ID.sh $DEPLOY_ID ${{ secrets.APP_DIRECTORY }} ${{ secrets.S3_BUCKET_NAME }}",
+              "rm deploy-$DEPLOY_ID.sh"
+            ] \
+            --output text
+          
+          # デプロイスクリプトをS3から削除
+          aws s3 rm s3://${{ secrets.S3_BUCKET_NAME }}/deploy/deploy-$DEPLOY_ID.sh
+          
+          echo "Deployment process initiated on EC2 instance"
