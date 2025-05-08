@@ -33,7 +33,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-northeast-1
 
-      - name: Update Security Group
+      - name: Update Security Group for GitHub Actions
         run: |
           # GitHubのMetaエンドポイントからIPレンジを取得
           GITHUB_IP_RANGES=$(curl -s https://api.github.com/meta | jq -r '.actions[]')
@@ -41,18 +41,25 @@ jobs:
           # セキュリティグループIDを設定
           SECURITY_GROUP_ID="${{ secrets.EC2_SECURITY_GROUP_ID }}"
           
-          # 現在のインバウンドルールを削除（GitHubのIPのみ）
-          aws ec2 describe-security-groups --group-ids $SECURITY_GROUP_ID --query "SecurityGroups[0].IpPermissions[?ToPort==22]" --output json | jq -c '.[]' | while read -r rule; do
-            if echo "$rule" | grep -q "GitHub-Actions"; then
-              CIDR=$(echo "$rule" | jq -r '.IpRanges[0].CidrIp')
-              aws ec2 revoke-security-group-ingress --group-id $SECURITY_GROUP_ID --protocol tcp --port 22 --cidr $CIDR
-            fi
+          # 既存のGitHub Actionsルールを削除（タグベース）
+          RULE_IDS=$(aws ec2 describe-security-group-rules \
+            --filter "Name=group-id,Values=$SECURITY_GROUP_ID" "Name=tag-key,Values=Source" "Name=tag-value,Values=GitHub-Actions" \
+            --query "SecurityGroupRules[*].SecurityGroupRuleId" --output text)
+          
+          for rule_id in $RULE_IDS; do
+            aws ec2 revoke-security-group-ingress --group-id $SECURITY_GROUP_ID --security-group-rule-ids $rule_id
           done
           
           # 新しいGitHubのIPレンジを追加
           for ip_range in $GITHUB_IP_RANGES; do
-            aws ec2 authorize-security-group-ingress --group-id $SECURITY_GROUP_ID --protocol tcp --port 22 --cidr $ip_range --description "GitHub-Actions"
+            aws ec2 authorize-security-group-ingress \
+              --group-id $SECURITY_GROUP_ID \
+              --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=$ip_range}]" \
+              --tag-specifications "ResourceType=security-group-rule,Tags=[{Key=Source,Value=GitHub-Actions}]"
           done
+
+  env:
+    AWS_REGION: ap-northeast-1
       
           
       - name: Setup SSH
