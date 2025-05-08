@@ -13,29 +13,15 @@ type User struct {
 	Password  string         `json:"-" gorm:"not null"`
 	Name      string         `json:"name" gorm:"not null"`
 	Nickname  string         `json:"nickname" gorm:"not null"`
-	AvatarURL string         `json:"avatar_url"`
 	Bio       string         `json:"bio"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
 
 	// リレーション
-	ExternalAccounts []ExternalAccount `json:"-"`
-	Works            []Work            `json:"-"`
-	Likes            []Like            `json:"-"`
-	Comments         []Comment         `json:"-"`
-}
-
-// ExternalAccount 外部認証アカウント
-type ExternalAccount struct {
-	ID         uint      `json:"id" gorm:"primaryKey"`
-	UserID     uint      `json:"user_id"`
-	Provider   string    `json:"provider"`
-	ExternalID string    `json:"external_id"`
-	CreatedAt  time.Time `json:"created_at"`
-
-	// リレーション
-	User User `json:"-"`
+	Works    []Work    `json:"-"`
+	Likes    []Like    `json:"-"`
+	Comments []Comment `json:"-"`
 }
 
 // Tag タグモデル
@@ -50,20 +36,27 @@ type Tag struct {
 
 // Work 作品モデル
 type Work struct {
-	ID            uint           `json:"id" gorm:"primaryKey"`
-	Title         string         `json:"title" gorm:"not null"`
-	Description   string         `json:"description"`
-	FileURL       string         `json:"file_url" gorm:"not null"`
-	ThumbnailURL  string         `json:"thumbnail_url"`
-	CodeShared    bool           `json:"code_shared" gorm:"default:false"`
-	CodeContent   string         `json:"code_content"`
-	Views         int            `json:"views" gorm:"default:0"`
-	UserID        *uint          `json:"user_id"`
-	IsGuest       bool           `json:"is_guest" gorm:"default:false"`
-	GuestNickname string         `json:"guest_nickname"`
-	CreatedAt     time.Time      `json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
-	DeletedAt     gorm.DeletedAt `json:"-" gorm:"index"`
+	ID                uint           `json:"id" gorm:"primaryKey"`
+	Title             string         `json:"title" gorm:"not null"`
+	Description       string         `json:"description"`
+	FileData          []byte         `json:"-" gorm:"type:longblob"` // 互換性のために残す
+	FileType          string         `json:"file_type"`
+	FileName          string         `json:"file_name"`
+	FileURL           string         `json:"file_url"`               // 追加
+	FilePublicID      string         `json:"-"`                      // 追加
+	ThumbnailData     []byte         `json:"-" gorm:"type:longblob"` // 互換性のために残す
+	ThumbnailType     string         `json:"thumbnail_type"`
+	ThumbnailURL      string         `json:"thumbnail_url"` // 追加
+	ThumbnailPublicID string         `json:"-"`             // 追加
+	CodeShared        bool           `json:"code_shared" gorm:"default:false"`
+	CodeContent       string         `json:"code_content"`
+	Views             int            `json:"views" gorm:"default:0"`
+	UserID            *uint          `json:"user_id"`
+	IsGuest           bool           `json:"is_guest" gorm:"default:false"`
+	GuestNickname     string         `json:"guest_nickname"`
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
+	DeletedAt         gorm.DeletedAt `json:"-" gorm:"index"`
 
 	// リレーション
 	User     *User     `json:"user,omitempty" gorm:"foreignKey:UserID"`
@@ -104,27 +97,31 @@ type Comment struct {
 	Work Work  `json:"-"`
 }
 
-// TableName テーブル名を指定
-func (User) TableName() string {
-	return "users"
+// ProcessingWork Processing作品モデル
+type ProcessingWork struct {
+	ID           uint           `json:"id" gorm:"primaryKey"`
+	WorkID       uint           `json:"work_id" gorm:"not null;index"`
+	OriginalName string         `json:"original_name"`
+	PDEContent   string         `json:"pde_content" gorm:"type:text"`
+	JSContent    string         `json:"js_content" gorm:"type:text"`
+	CanvasID     string         `json:"canvas_id"`
+	Status       string         `json:"status" gorm:"type:enum('pending','processing','processed','error');default:'pending'"`
+	ErrorMessage string         `json:"error_message"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
+
+	// リレーション
+	Work Work `json:"work,omitempty" gorm:"foreignKey:WorkID"`
 }
 
-func (ExternalAccount) TableName() string {
-	return "external_accounts"
+// WorkTag 作品とタグの中間テーブル
+type WorkTag struct {
+	WorkID uint `gorm:"primaryKey"`
+	TagID  uint `gorm:"primaryKey"`
 }
 
-func (Tag) TableName() string {
-	return "tags"
-}
-
-func (Work) TableName() string {
-	return "works"
-}
-
-func (Like) TableName() string {
-	return "likes"
-}
-
-func (Comment) TableName() string {
-	return "comments"
+// TableName テーブル名指定
+func (WorkTag) TableName() string {
+	return "work_tags"
 }

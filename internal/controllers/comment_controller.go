@@ -30,19 +30,6 @@ type CommentRequest struct {
 	GuestNickname string `json:"guest_nickname"`
 }
 
-// CommentResponse コメントレスポンス
-type CommentResponse struct {
-	Comment interface{} `json:"comment"`
-}
-
-// CommentsResponse コメント一覧レスポンス
-type CommentsResponse struct {
-	Comments []models.Comment `json:"comments"`
-	Total    int64            `json:"total"`
-	Pages    int              `json:"pages"`
-	Page     int              `json:"page"`
-}
-
 // Create 新しいコメントを作成
 func (c *CommentController) Create(ctx *gin.Context) {
 	// IDを解析
@@ -87,7 +74,7 @@ func (c *CommentController) Create(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusCreated, CommentResponse{Comment: comment})
+	ctx.JSON(http.StatusCreated, gin.H{"comment": comment})
 }
 
 // Update コメントを更新
@@ -128,7 +115,7 @@ func (c *CommentController) Update(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, CommentResponse{Comment: comment})
+	ctx.JSON(http.StatusOK, gin.H{"comment": comment})
 }
 
 // Delete コメントを削除
@@ -200,10 +187,10 @@ func (c *CommentController) List(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, CommentsResponse{
-		Comments: comments,
-		Total:    total,
-		Pages:    pages,
-		Page:     page,
+	ctx.JSON(http.StatusOK, gin.H{
+		"comments": comments,
+		"total":    total,
+		"pages":    pages,
+		"page":     page,
 	})
 }

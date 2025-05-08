@@ -50,14 +50,6 @@ func main() {
 		log.Fatalf("データベース接続に失敗しました: %v", err)
 	}
 
-	// SQLDBインスタンスを取得してログ設定を表示
-	sqlDB, err := db.DB()
-	if err != nil {
-		log.Fatalf("SQLDBインスタンス取得に失敗しました: %v", err)
-	}
-	log.Printf("データベース設定: MaxOpenConns=%d, MaxIdleConns=%d\n",
-		sqlDB.Stats().MaxOpenConnections, sqlDB.Stats().Idle)
-
 	// ルーターをセットアップ
 	router := routes.SetupRouter(cfg, db)
 
@@ -88,11 +80,12 @@ func handleMigration(cfg *config.Config, args []string) {
 		fmt.Println("マイグレーションを実行中...")
 		err = db.AutoMigrate(
 			&models.User{},
-			&models.ExternalAccount{},
 			&models.Tag{},
 			&models.Work{},
 			&models.Like{},
 			&models.Comment{},
+			&models.ProcessingWork{},
+			&models.WorkTag{},
 		)
 		if err != nil {
 			log.Fatalf("マイグレーションに失敗しました: %v", err)
@@ -105,10 +98,10 @@ func handleMigration(cfg *config.Config, args []string) {
 		err = db.Migrator().DropTable(
 			&models.Comment{},
 			&models.Like{},
-			"work_tags",
+			&models.WorkTag{},
+			&models.ProcessingWork{},
 			&models.Work{},
 			&models.Tag{},
-			&models.ExternalAccount{},
 			&models.User{},
 		)
 		if err != nil {

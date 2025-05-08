@@ -1,0 +1,14 @@
+@base_url = http://13.114.254.195:8080
+@use_url = {{base_url}}
+
+### GET Request
+GET {{use_url}}/api/v1/works
+
+### Health Check
+GET {{use_url}}/api/v1/health
+
+### POST Request
+POST {{use_url}}/api/v1/auth/register
+Content-Type: application/json
+
+

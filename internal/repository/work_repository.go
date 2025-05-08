@@ -21,6 +21,8 @@ type WorkRepository interface {
 	GetLikesCount(workID uint) (int, error)
 	HasLiked(userID, workID uint) (bool, error)
 	ListByUser(userID uint, page, limit int) ([]models.Work, int64, error)
+	GetFileData(id uint) ([]byte, string, string, error)
+	GetThumbnailData(id uint) ([]byte, string, error)
 }
 
 // workRepository WorkRepositoryの実装
@@ -101,9 +103,9 @@ func (r *workRepository) List(page, limit int, search, tag string, userID *uint,
 	// ソート順を適用
 	switch sort {
 	case "popular":
-		query = query.Order("likes_count DESC, views DESC")
-	case "views":
-		query = query.Order("views DESC")
+		query = query.Order("views DESC, likes_count DESC")
+	case "likes":
+		query = query.Order("likes_count DESC")
 	default: // "newest"
 		query = query.Order("created_at DESC")
 	}
@@ -190,4 +192,30 @@ func (r *workRepository) ListByUser(userID uint, page, limit int) ([]models.Work
 	}
 
 	return works, total, nil
+}
+
+// GetFileData ファイルデータを取得
+func (r *workRepository) GetFileData(id uint) ([]byte, string, string, error) {
+	var work models.Work
+
+	// ファイルデータを取得 (BLOB形式)
+	if err := r.db.Select("file_data", "file_type", "file_name").First(&work, id).Error; err != nil {
+		return nil, "", "", err
+	}
+
+	// ファイルデータが空かチェック
+	if len(work.FileData) == 0 {
+		return nil, "", "", errors.New("ファイルデータが存在しません")
+	}
+
+	return work.FileData, work.FileType, work.FileName, nil
+}
+
+// GetThumbnailData サムネイルデータを取得
+func (r *workRepository) GetThumbnailData(id uint) ([]byte, string, error) {
+	var work models.Work
+	if err := r.db.Select("thumbnail_data", "thumbnail_type").First(&work, id).Error; err != nil {
+		return nil, "", err
+	}
+	return work.ThumbnailData, work.ThumbnailType, nil
 }

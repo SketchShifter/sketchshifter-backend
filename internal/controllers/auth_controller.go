@@ -36,10 +36,10 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
-// OAuthRequest OAuth認証リクエスト
-type OAuthRequest struct {
-	Provider string `json:"provider" binding:"required"`
-	Code     string `json:"code" binding:"required"`
+// PasswordChangeRequest パスワード変更リクエスト
+type PasswordChangeRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required,min=6"`
 }
 
 // AuthResponse 認証レスポンス
@@ -92,26 +92,6 @@ func (c *AuthController) Login(ctx *gin.Context) {
 	})
 }
 
-// OAuth OAuth認証
-func (c *AuthController) OAuth(ctx *gin.Context) {
-	var req OAuthRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	user, token, err := c.authService.OAuth(req.Provider, req.Code)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	ctx.JSON(http.StatusOK, AuthResponse{
-		User:  user,
-		Token: token,
-	})
-}
-
 // GetMe 現在のユーザー情報を取得
 func (c *AuthController) GetMe(ctx *gin.Context) {
 	// コンテキストからユーザーを取得
@@ -122,14 +102,6 @@ func (c *AuthController) GetMe(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, user)
-}
-
-// auth_controller.go に追加する部分
-
-// PasswordChangeRequest パスワード変更リクエスト
-type PasswordChangeRequest struct {
-	CurrentPassword string `json:"current_password" binding:"required"`
-	NewPassword     string `json:"new_password" binding:"required,min=6"`
 }
 
 // ChangePassword パスワードを変更

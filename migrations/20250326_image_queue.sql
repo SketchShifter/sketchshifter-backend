@@ -1,8 +1,3 @@
--- UTF-8mb4を使用する設定
--- データベースのデフォルト文字セットを設定
-ALTER DATABASE CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- テーブルを削除（存在する場合）
 SET FOREIGN_KEY_CHECKS=0;
 
 DROP TABLE IF EXISTS users;
@@ -28,7 +23,7 @@ CREATE TABLE users (
     bio TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+);
 
 -- 外部アカウントテーブル
 CREATE TABLE external_accounts (
@@ -39,14 +34,14 @@ CREATE TABLE external_accounts (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE (provider, external_id)
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+);
 
 -- タグテーブル
 CREATE TABLE tags (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(50) NOT NULL UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+);
 
 -- 作品テーブル
 CREATE TABLE works (
@@ -64,7 +59,7 @@ CREATE TABLE works (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+);
 
 -- 作品とタグの関連付けテーブル
 CREATE TABLE work_tags (
@@ -73,7 +68,7 @@ CREATE TABLE work_tags (
     PRIMARY KEY (work_id, tag_id),
     FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE,
     FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+);
 
 -- いいねテーブル
 CREATE TABLE likes (
@@ -83,7 +78,7 @@ CREATE TABLE likes (
     PRIMARY KEY (user_id, work_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+);
 
 -- コメントテーブル
 CREATE TABLE comments (
@@ -97,7 +92,7 @@ CREATE TABLE comments (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+);
 
 -- 画像テーブル
 CREATE TABLE images (
@@ -108,15 +103,10 @@ CREATE TABLE images (
     webp_path VARCHAR(512),
     status ENUM('pending', 'processing', 'processed', 'error') DEFAULT 'pending',
     error_message TEXT,
-    original_size BIGINT DEFAULT 0 COMMENT '元のファイルサイズ（バイト）',
-    webp_size BIGINT DEFAULT 0 COMMENT '変換後のWebPファイルサイズ（バイト）',
-    compression_ratio DOUBLE DEFAULT 0 COMMENT '圧縮率（パーセント）',
-    width INT DEFAULT 0 COMMENT '画像の幅（ピクセル）',
-    height INT DEFAULT 0 COMMENT '画像の高さ（ピクセル）',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+);
 
 -- Processing作品変換テーブル
 CREATE TABLE processing_works (
@@ -124,8 +114,7 @@ CREATE TABLE processing_works (
     work_id INT NOT NULL,
     file_name VARCHAR(255) NOT NULL,
     original_name VARCHAR(255),
-    pde_content TEXT COMMENT 'PDEファイルの内容を直接保存',
-    pde_path VARCHAR(512),
+    pde_path VARCHAR(512) NOT NULL,
     js_path VARCHAR(512),
     canvas_id VARCHAR(255),
     status ENUM('pending', 'processing', 'processed', 'error') DEFAULT 'pending',
@@ -133,4 +122,28 @@ CREATE TABLE processing_works (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+);
+
+-- imagesテーブルの拡張（圧縮情報追加）
+ALTER TABLE images
+ADD COLUMN original_size BIGINT DEFAULT 0 COMMENT '元のファイルサイズ（バイト）',
+ADD COLUMN webp_size BIGINT DEFAULT 0 COMMENT '変換後のWebPファイルサイズ（バイト）',
+ADD COLUMN compression_ratio DOUBLE DEFAULT 0 COMMENT '圧縮率（パーセント）',
+ADD COLUMN width INT DEFAULT 0 COMMENT '画像の幅（ピクセル）',
+ADD COLUMN height INT DEFAULT 0 COMMENT '画像の高さ（ピクセル）';
+
+-- 新しいマイグレーションファイル: 20250329_utf8mb4_update.sql を作成
+
+-- データベースのデフォルト文字セットを設定
+ALTER DATABASE CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 既存のテーブルを変換
+ALTER TABLE users CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE external_accounts CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE tags CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE works CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE work_tags CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE likes CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE comments CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE images CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE processing_works CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

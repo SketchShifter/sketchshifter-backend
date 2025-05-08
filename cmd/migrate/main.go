@@ -34,11 +34,11 @@ func main() {
 		// マイグレーションを実行
 		err = db.AutoMigrate(
 			&models.User{},
-			&models.ExternalAccount{},
 			&models.Tag{},
 			&models.Work{},
 			&models.Like{},
 			&models.Comment{},
+			&models.ProcessingWork{},
 		)
 		if err != nil {
 			log.Fatalf("マイグレーションに失敗しました: %v", err)
@@ -53,8 +53,8 @@ func main() {
 			"work_tags",
 			&models.Work{},
 			&models.Tag{},
-			&models.ExternalAccount{},
 			&models.User{},
+			&models.ProcessingWork{},
 		)
 		if err != nil {
 			log.Fatalf("テーブル削除に失敗しました: %v", err)
