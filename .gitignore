@@ -16,6 +16,17 @@ dev/src/
 *.out
 .env
 
+# Compiled binaries
+/app
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+build/
+
 # 一時ファイルやエディタ/IDEファイル
 *.log
 *.tmp

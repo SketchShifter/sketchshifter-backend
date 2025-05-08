@@ -1,0 +1,82 @@
+name: Build and Deploy to EC2
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.18'
+          
+      - name: Install dependencies
+        run: |
+          go mod download
+          go mod tidy
+      
+      - name: Build application
+        run: |
+          CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o app ./cmd/app/main.go
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-1
+
+      - name: Update Security Group
+        run: |
+          # GitHubのMetaエンドポイントからIPレンジを取得
+          GITHUB_IP_RANGES=$(curl -s https://api.github.com/meta | jq -r '.actions[]')
+          
+          # セキュリティグループIDを設定
+          SECURITY_GROUP_ID="${{ secrets.EC2_SECURITY_GROUP_ID }}"
+          
+          # 現在のインバウンドルールを削除（GitHubのIPのみ）
+          aws ec2 describe-security-groups --group-ids $SECURITY_GROUP_ID --query "SecurityGroups[0].IpPermissions[?ToPort==22]" --output json | jq -c '.[]' | while read -r rule; do
+            if echo "$rule" | grep -q "GitHub-Actions"; then
+              CIDR=$(echo "$rule" | jq -r '.IpRanges[0].CidrIp')
+              aws ec2 revoke-security-group-ingress --group-id $SECURITY_GROUP_ID --protocol tcp --port 22 --cidr $CIDR
+            fi
+          done
+          
+          # 新しいGitHubのIPレンジを追加
+          for ip_range in $GITHUB_IP_RANGES; do
+            aws ec2 authorize-security-group-ingress --group-id $SECURITY_GROUP_ID --protocol tcp --port 22 --cidr $ip_range --description "GitHub-Actions"
+          done
+      
+          
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.HOST_NAME }} >> ~/.ssh/known_hosts
+      
+      - name: Deploy to EC2
+        run: |
+          # アプリケーションディレクトリの確認
+          ssh ${{ secrets.USER_NAME }}@${{ secrets.HOST_NAME }} "mkdir -p ${{ secrets.APP_DIRECTORY }} ${{ secrets.APP_DIRECTORY }}/uploads"
+          
+          # 必要なファイルをコピー
+          scp app ${{ secrets.USER_NAME }}@${{ secrets.HOST_NAME }}:${{ secrets.APP_DIRECTORY }}/
+          scp docker-compose.yml ${{ secrets.USER_NAME }}@${{ secrets.HOST_NAME }}:${{ secrets.APP_DIRECTORY }}/
+          scp Dockerfile ${{ secrets.USER_NAME }}@${{ secrets.HOST_NAME }}:${{ secrets.APP_DIRECTORY }}/
+          
+          # 既存の.envファイルがない場合は.env.exampleをコピー
+          # ssh ${{ secrets.USER_NAME }}@${{ secrets.HOST_NAME }} "if [ ! -f ${{ secrets.APP_DIRECTORY }}/.env ]; then cp ${{ secrets.APP_DIRECTORY }}/.env.example ${{ secrets.APP_DIRECTORY }}/.env; fi"
+          
+          # 環境変数ファイルを転送
+          # echo "${{ secrets.ENV_FILE }}" | ssh ${{ secrets.USER_NAME }}@${{ secrets.HOST_NAME }} "cat > ${{ secrets.APP_DIRECTORY }}/.env"
+          
+          # デプロイの実行
+          ssh ${{ secrets.USER_NAME }}@${{ secrets.HOST_NAME }} "cd ${{ secrets.APP_DIRECTORY }} && docker-compose down && docker-compose up -d"
