@@ -151,9 +151,8 @@ jobs:
           echo "Waiting 30 seconds for deployment to progress..."
           sleep 30
           
-          # コマンド実行のステータスをチェック（オプション）
-          echo "Checking latest command execution status..."
-          aws ssm list-commands \
-            --filters Key=Status,Values=InProgress,Success,Failed \
-            --max-items 5 \
-            --output table
+          # コマンド実行のステータスをチェック（修正版）
+          echo "Checking latest command executions..."
+          aws ssm list-commands --max-items 5 --output table
+          
+          echo "For detailed execution results, check AWS SSM console"
