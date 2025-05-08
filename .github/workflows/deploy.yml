@@ -57,9 +57,6 @@ jobs:
               --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=$ip_range}]" \
               --tag-specifications "ResourceType=security-group-rule,Tags=[{Key=Source,Value=GitHub-Actions}]"
           done
-
-  env:
-    AWS_REGION: ap-northeast-1
       
           
       - name: Setup SSH
