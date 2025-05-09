@@ -25,9 +25,7 @@ func NewCommentController(commentService services.CommentService) *CommentContro
 
 // CommentRequest コメントリクエスト
 type CommentRequest struct {
-	Content       string `json:"content" binding:"required"`
-	IsGuest       bool   `json:"is_guest"`
-	GuestNickname string `json:"guest_nickname"`
+	Content string `json:"content" binding:"required"`
 }
 
 // Create 新しいコメントを作成
@@ -45,25 +43,19 @@ func (c *CommentController) Create(ctx *gin.Context) {
 		return
 	}
 
-	// ユーザー情報を取得（非ゲストコメントの場合）
-	var userID *uint
-	if !req.IsGuest {
-		user, exists := ctx.Get("user")
-		if !exists {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "認証が必要です"})
-			return
-		}
-		u := user.(*models.User)
-		userID = &u.ID
+	// ユーザー情報を取得
+	user, exists := ctx.Get("user")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "認証が必要です"})
+		return
 	}
+	u := user.(*models.User)
 
 	// コメントを作成
 	comment, err := c.commentService.Create(
 		req.Content,
 		uint(workID),
-		userID,
-		req.IsGuest,
-		req.GuestNickname,
+		u.ID,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "見つかりません") {

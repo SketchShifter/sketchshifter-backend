@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/SketchShifter/sketchshifter_backend/internal/models"
 	"github.com/SketchShifter/sketchshifter_backend/internal/repository"
@@ -11,7 +12,6 @@ import (
 type UserService interface {
 	GetByID(id uint) (*models.User, error)
 	GetUserWorks(userID uint, page, limit int) ([]models.Work, int64, int, error)
-	GetUserFavorites(userID uint, page, limit int) ([]models.Work, int64, int, error)
 	UpdateProfile(userID uint, name, nickname, bio string) (*models.User, error)
 }
 
@@ -57,29 +57,6 @@ func (s *userService) GetUserWorks(userID uint, page, limit int) ([]models.Work,
 	return works, total, pages, nil
 }
 
-// GetUserFavorites ユーザーのお気に入り作品一覧を取得
-func (s *userService) GetUserFavorites(userID uint, page, limit int) ([]models.Work, int64, int, error) {
-	// ユーザーが存在するか確認
-	_, err := s.userRepo.FindByID(userID)
-	if err != nil {
-		return nil, 0, 0, errors.New("ユーザーが見つかりません")
-	}
-
-	// お気に入り作品一覧を取得
-	works, total, err := s.userRepo.GetUserFavorites(userID, page, limit)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-
-	// 総ページ数を計算
-	pages := int(total) / limit
-	if int(total)%limit > 0 {
-		pages++
-	}
-
-	return works, total, pages, nil
-}
-
 // UpdateProfile ユーザープロフィールを更新
 func (s *userService) UpdateProfile(userID uint, name, nickname, bio string) (*models.User, error) {
 	// ユーザーを取得
@@ -89,10 +66,10 @@ func (s *userService) UpdateProfile(userID uint, name, nickname, bio string) (*m
 	}
 
 	// フィールドを更新（空でない場合のみ）
-	if name != "" {
+	if strings.TrimSpace(name) != "" {
 		user.Name = name
 	}
-	if nickname != "" {
+	if strings.TrimSpace(nickname) != "" {
 		user.Nickname = nickname
 	}
 

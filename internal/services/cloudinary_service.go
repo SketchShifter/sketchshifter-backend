@@ -52,7 +52,7 @@ func (s *cloudinaryService) UploadImage(file multipart.File, fileName string, co
 		Folder:       s.cfg.Cloudinary.Folder,
 		PublicID:     fileName,
 		ResourceType: "image",
-		// 圧縮設定 - フォーマットを修正
+		// 圧縮設定
 		Transformation: fmt.Sprintf("q_%d", compressionQuality),
 	}
 

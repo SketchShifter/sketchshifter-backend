@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/SketchShifter/sketchshifter_backend/internal/models"
-
 	"gorm.io/gorm"
 )
 
@@ -21,8 +20,6 @@ type WorkRepository interface {
 	GetLikesCount(workID uint) (int, error)
 	HasLiked(userID, workID uint) (bool, error)
 	ListByUser(userID uint, page, limit int) ([]models.Work, int64, error)
-	GetFileData(id uint) ([]byte, string, string, error)
-	GetThumbnailData(id uint) ([]byte, string, error)
 }
 
 // workRepository WorkRepositoryの実装
@@ -66,7 +63,8 @@ func (r *workRepository) Delete(id uint) error {
 
 // IncrementViews 閲覧数を増加
 func (r *workRepository) IncrementViews(id uint) error {
-	return r.db.Model(&models.Work{}).Where("id = ?", id).Update("views", gorm.Expr("views + 1")).Error
+	return r.db.Model(&models.Work{}).Where("id = ?", id).
+		Update("views", gorm.Expr("views + 1")).Error
 }
 
 // List 作品一覧を取得
@@ -111,11 +109,10 @@ func (r *workRepository) List(page, limit int, search, tag string, userID *uint,
 	}
 
 	// データを取得
-	if err := query.
-		Offset(offset).
-		Limit(limit).
-		Find(&works).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, 0, err
+	if err := query.Offset(offset).Limit(limit).Find(&works).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, 0, err
+		}
 	}
 
 	// 各作品のいいね数とコメント数を取得
@@ -138,7 +135,8 @@ func (r *workRepository) AddLike(userID, workID uint) error {
 
 // RemoveLike いいねを削除
 func (r *workRepository) RemoveLike(userID, workID uint) error {
-	return r.db.Where("user_id = ? AND work_id = ?", userID, workID).Delete(&models.Like{}).Error
+	return r.db.Where("user_id = ? AND work_id = ?", userID, workID).
+		Delete(&models.Like{}).Error
 }
 
 // GetLikesCount いいね数を取得
@@ -153,7 +151,8 @@ func (r *workRepository) GetLikesCount(workID uint) (int, error) {
 // HasLiked ユーザーがいいねしているか確認
 func (r *workRepository) HasLiked(userID, workID uint) (bool, error) {
 	var count int64
-	if err := r.db.Model(&models.Like{}).Where("user_id = ? AND work_id = ?", userID, workID).Count(&count).Error; err != nil {
+	if err := r.db.Model(&models.Like{}).Where("user_id = ? AND work_id = ?", userID, workID).
+		Count(&count).Error; err != nil {
 		return false, err
 	}
 	return count > 0, nil
@@ -177,10 +176,7 @@ func (r *workRepository) ListByUser(userID uint, page, limit int) ([]models.Work
 	}
 
 	// データを取得
-	if err := query.
-		Offset(offset).
-		Limit(limit).
-		Order("created_at DESC").
+	if err := query.Offset(offset).Limit(limit).Order("created_at DESC").
 		Find(&works).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, 0, err
 	}
@@ -192,30 +188,4 @@ func (r *workRepository) ListByUser(userID uint, page, limit int) ([]models.Work
 	}
 
 	return works, total, nil
-}
-
-// GetFileData ファイルデータを取得
-func (r *workRepository) GetFileData(id uint) ([]byte, string, string, error) {
-	var work models.Work
-
-	// ファイルデータを取得 (BLOB形式)
-	if err := r.db.Select("file_data", "file_type", "file_name").First(&work, id).Error; err != nil {
-		return nil, "", "", err
-	}
-
-	// ファイルデータが空かチェック
-	if len(work.FileData) == 0 {
-		return nil, "", "", errors.New("ファイルデータが存在しません")
-	}
-
-	return work.FileData, work.FileType, work.FileName, nil
-}
-
-// GetThumbnailData サムネイルデータを取得
-func (r *workRepository) GetThumbnailData(id uint) ([]byte, string, error) {
-	var work models.Work
-	if err := r.db.Select("thumbnail_data", "thumbnail_type").First(&work, id).Error; err != nil {
-		return nil, "", err
-	}
-	return work.ThumbnailData, work.ThumbnailType, nil
 }

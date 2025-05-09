@@ -98,7 +98,7 @@ func (r *tagRepository) AttachTagsToWork(workID uint, tagIDs []uint) error {
 
 	// 新しいタグを追加
 	for _, tagID := range tagIDs {
-		if err := r.db.Create(&models.WorkTag{WorkID: workID, TagID: tagID}).Error; err != nil {
+		if err := r.db.Exec("INSERT INTO work_tags (work_id, tag_id) VALUES (?, ?)", workID, tagID).Error; err != nil {
 			return err
 		}
 	}
@@ -108,7 +108,7 @@ func (r *tagRepository) AttachTagsToWork(workID uint, tagIDs []uint) error {
 
 // DetachTagsFromWork 作品からすべてのタグの関連付けを解除
 func (r *tagRepository) DetachTagsFromWork(workID uint) error {
-	return r.db.Where("work_id = ?", workID).Delete(&models.WorkTag{}).Error
+	return r.db.Exec("DELETE FROM work_tags WHERE work_id = ?", workID).Error
 }
 
 // GetTagsForWork 作品に関連付けられたタグを取得

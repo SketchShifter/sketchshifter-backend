@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/SketchShifter/sketchshifter_backend/internal/models"
 	"github.com/SketchShifter/sketchshifter_backend/internal/repository"
@@ -9,7 +10,7 @@ import (
 
 // CommentService コメントに関するサービスインターフェース
 type CommentService interface {
-	Create(content string, workID uint, userID *uint, isGuest bool, guestNickname string) (*models.Comment, error)
+	Create(content string, workID uint, userID uint) (*models.Comment, error)
 	GetByID(id uint) (*models.Comment, error)
 	Update(id, userID uint, content string) (*models.Comment, error)
 	Delete(id, userID uint) error
@@ -31,30 +32,23 @@ func NewCommentService(commentRepo repository.CommentRepository, workRepo reposi
 }
 
 // Create 新しいコメントを作成
-func (s *commentService) Create(content string, workID uint, userID *uint, isGuest bool, guestNickname string) (*models.Comment, error) {
+func (s *commentService) Create(content string, workID uint, userID uint) (*models.Comment, error) {
+	// コンテンツのバリデーション
+	if strings.TrimSpace(content) == "" {
+		return nil, errors.New("コメント内容は必須です")
+	}
+
 	// 作品が存在するか確認
 	_, err := s.workRepo.FindByID(workID)
 	if err != nil {
 		return nil, errors.New("作品が見つかりません")
 	}
 
-	// ゲストコメントの場合、ニックネームを確認
-	if isGuest && guestNickname == "" {
-		return nil, errors.New("ゲストニックネームは必須です")
-	}
-
-	// 通常のコメントの場合、ユーザーIDを確認
-	if !isGuest && userID == nil {
-		return nil, errors.New("ユーザーIDは必須です")
-	}
-
 	// 新しいコメントを作成
 	comment := &models.Comment{
-		Content:       content,
-		WorkID:        workID,
-		UserID:        userID,
-		IsGuest:       isGuest,
-		GuestNickname: guestNickname,
+		Content: content,
+		WorkID:  workID,
+		UserID:  userID,
 	}
 
 	// データベースに保存
@@ -72,14 +66,19 @@ func (s *commentService) GetByID(id uint) (*models.Comment, error) {
 
 // Update コメントを更新
 func (s *commentService) Update(id, userID uint, content string) (*models.Comment, error) {
+	// コンテンツのバリデーション
+	if strings.TrimSpace(content) == "" {
+		return nil, errors.New("コメント内容は必須です")
+	}
+
 	// コメントを取得
 	comment, err := s.commentRepo.FindByID(id)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("コメントが見つかりません")
 	}
 
 	// 権限チェック
-	if comment.UserID == nil || *comment.UserID != userID {
+	if comment.UserID != userID {
 		return nil, errors.New("このコメントを更新する権限がありません")
 	}
 
@@ -99,11 +98,11 @@ func (s *commentService) Delete(id, userID uint) error {
 	// コメントを取得
 	comment, err := s.commentRepo.FindByID(id)
 	if err != nil {
-		return err
+		return errors.New("コメントが見つかりません")
 	}
 
 	// 権限チェック
-	if comment.UserID == nil || *comment.UserID != userID {
+	if comment.UserID != userID {
 		return errors.New("このコメントを削除する権限がありません")
 	}
 

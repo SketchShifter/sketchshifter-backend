@@ -1,10 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/SketchShifter/sketchshifter_backend/internal/config"
 	"github.com/SketchShifter/sketchshifter_backend/internal/models"
@@ -74,32 +72,43 @@ func handleMigration(cfg *config.Config, args []string) {
 		log.Fatalf("データベース接続に失敗しました: %v", err)
 	}
 
-	switch strings.ToLower(command) {
+	switch command {
 	case "up":
 		// マイグレーションを実行
-		fmt.Println("マイグレーションを実行中...")
+		log.Println("マイグレーションを実行中...")
 		err = db.AutoMigrate(
 			&models.User{},
 			&models.Tag{},
 			&models.Work{},
 			&models.Like{},
 			&models.Comment{},
-			&models.ProcessingWork{},
-			&models.WorkTag{},
+			&models.Project{},
+			&models.ProjectMember{},
+			&models.Task{},
+			&models.TaskWork{},
+			&models.Vote{},
+			&models.VoteOption{},
+			&models.VoteResponse{},
 		)
 		if err != nil {
 			log.Fatalf("マイグレーションに失敗しました: %v", err)
 		}
-		fmt.Println("マイグレーションが成功しました")
+		log.Println("マイグレーションが成功しました")
 
 	case "down":
 		// テーブルを削除（逆順）
-		fmt.Println("マイグレーションをロールバック中...")
+		log.Println("マイグレーションをロールバック中...")
 		err = db.Migrator().DropTable(
+			&models.VoteResponse{},
+			&models.VoteOption{},
+			&models.Vote{},
+			&models.TaskWork{},
+			&models.Task{},
+			&models.ProjectMember{},
+			&models.Project{},
 			&models.Comment{},
 			&models.Like{},
-			&models.WorkTag{},
-			&models.ProcessingWork{},
+			"work_tags",
 			&models.Work{},
 			&models.Tag{},
 			&models.User{},
@@ -107,7 +116,7 @@ func handleMigration(cfg *config.Config, args []string) {
 		if err != nil {
 			log.Fatalf("テーブル削除に失敗しました: %v", err)
 		}
-		fmt.Println("テーブルの削除が成功しました")
+		log.Println("テーブルの削除が成功しました")
 
 	default:
 		log.Fatalf("不明なコマンドです: %s", command)
