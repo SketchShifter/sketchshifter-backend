@@ -3,19 +3,17 @@ package services
 import (
 	"errors"
 	"fmt"
-	"mime/multipart"
 	"strings"
 
 	"github.com/SketchShifter/sketchshifter_backend/internal/models"
 	"github.com/SketchShifter/sketchshifter_backend/internal/repository"
-	"github.com/SketchShifter/sketchshifter_backend/internal/utils"
 )
 
 // WorkService 作品に関するサービスインターフェース
 type WorkService interface {
-	Create(title, description string, pdeContent string, thumbnail multipart.File, thumbnailHeader *multipart.FileHeader, codeShared bool, tagNames []string, userID uint) (*models.Work, error)
+	Create(title, description, pdeContent, thumbnailURL string, codeShared bool, tagNames []string, userID uint) (*models.Work, error)
 	GetByID(id uint) (*models.Work, error)
-	Update(id, userID uint, title, description string, pdeContent string, thumbnail multipart.File, thumbnailHeader *multipart.FileHeader, codeShared bool, tagNames []string) (*models.Work, error)
+	Update(id, userID uint, title, description, pdeContent, thumbnailURL string, codeShared bool, tagNames []string) (*models.Work, error)
 	Delete(id, userID uint) error
 	List(page, limit int, search, tag string, userID *uint, sort string) ([]models.Work, int64, int, error)
 	AddLike(userID, workID uint) (int, error)
@@ -26,32 +24,26 @@ type WorkService interface {
 
 // workService WorkServiceの実装
 type workService struct {
-	workRepo          repository.WorkRepository
-	tagRepo           repository.TagRepository
-	cloudinaryService CloudinaryService
-	lambdaService     LambdaService
+	workRepo      repository.WorkRepository
+	tagRepo       repository.TagRepository
+	lambdaService LambdaService
 }
 
 // NewWorkService WorkServiceを作成
 func NewWorkService(
 	workRepo repository.WorkRepository,
 	tagRepo repository.TagRepository,
-	cloudinaryService CloudinaryService,
 	lambdaService LambdaService) WorkService {
 	return &workService{
-		workRepo:          workRepo,
-		tagRepo:           tagRepo,
-		cloudinaryService: cloudinaryService,
-		lambdaService:     lambdaService,
+		workRepo:      workRepo,
+		tagRepo:       tagRepo,
+		lambdaService: lambdaService,
 	}
 }
 
 // Create 新しい作品を作成
 func (s *workService) Create(
-	title, description string,
-	pdeContent string,
-	thumbnail multipart.File,
-	thumbnailHeader *multipart.FileHeader,
+	title, description, pdeContent, thumbnailURL string,
 	codeShared bool,
 	tagNames []string,
 	userID uint) (*models.Work, error) {
@@ -64,29 +56,6 @@ func (s *workService) Create(
 	// PDEコードのバリデーション
 	if strings.TrimSpace(pdeContent) == "" {
 		return nil, errors.New("PDEコードは必須です")
-	}
-
-	// 変数の準備
-	var thumbnailURL, thumbnailPublicID, thumbnailType string
-	var err error
-
-	// サムネイルがある場合は処理
-	if thumbnail != nil && thumbnailHeader != nil {
-		// サムネイルは画像データを確認
-		if !isImageFile(thumbnailHeader.Filename) {
-			return nil, errors.New("サムネイルは画像ファイル（PNG, JPEG, GIF, WebP）である必要があります")
-		}
-
-		// Cloudinaryにアップロード
-		thumbnailPublicID, thumbnailURL, err = s.cloudinaryService.UploadImage(
-			thumbnail,
-			utils.GenerateRandomString(8)+"_thumb_"+thumbnailHeader.Filename,
-			70)
-		if err != nil {
-			return nil, fmt.Errorf("サムネイルのアップロードに失敗しました: %v", err)
-		}
-
-		thumbnailType = getContentTypeFromFilename(thumbnailHeader.Filename)
 	}
 
 	// JavaScriptへの変換（Lambda関数を使用）
@@ -107,18 +76,14 @@ func (s *workService) Create(
 		PDEContent:        pdeContent,
 		JSContent:         jsContent,
 		ThumbnailURL:      thumbnailURL,
-		ThumbnailType:     thumbnailType,
-		ThumbnailPublicID: thumbnailPublicID,
+		ThumbnailType:     "image/png", // TODO: URLから判定する場合は別途処理
+		ThumbnailPublicID: "",          // Cloudinaryを使わない場合は不要
 		CodeShared:        codeShared,
 		UserID:            userID,
 	}
 
 	// データベースに保存
 	if err := s.workRepo.Create(work); err != nil {
-		// エラーが発生した場合、Cloudinaryにアップロードした画像を削除
-		if thumbnailPublicID != "" {
-			s.cloudinaryService.DeleteImage(thumbnailPublicID)
-		}
 		return nil, fmt.Errorf("作品の保存に失敗しました: %v", err)
 	}
 
@@ -188,7 +153,7 @@ func (s *workService) GetByID(id uint) (*models.Work, error) {
 }
 
 // Update 作品を更新
-func (s *workService) Update(id, userID uint, title, description string, pdeContent string, thumbnail multipart.File, thumbnailHeader *multipart.FileHeader, codeShared bool, tagNames []string) (*models.Work, error) {
+func (s *workService) Update(id, userID uint, title, description, pdeContent, thumbnailURL string, codeShared bool, tagNames []string) (*models.Work, error) {
 	// 作品を取得
 	work, err := s.workRepo.FindByID(id)
 	if err != nil {
@@ -210,6 +175,12 @@ func (s *workService) Update(id, userID uint, title, description string, pdeCont
 	work.Description = description
 	work.CodeShared = codeShared
 
+	// サムネイルURLを更新
+	if thumbnailURL != "" {
+		work.ThumbnailURL = thumbnailURL
+		work.ThumbnailType = "image/png" // TODO: URLから判定する場合は別途処理
+	}
+
 	// PDEコードが変更された場合
 	pdeChanged := false
 	if strings.TrimSpace(pdeContent) != "" && pdeContent != work.PDEContent {
@@ -223,36 +194,6 @@ func (s *workService) Update(id, userID uint, title, description string, pdeCont
 			fmt.Printf("PDE変換に失敗しました: %v\n", err)
 		} else {
 			work.JSContent = jsContent
-		}
-	}
-
-	// サムネイルがアップロードされた場合は更新
-	if thumbnail != nil && thumbnailHeader != nil {
-		// サムネイルは画像データを確認
-		if !isImageFile(thumbnailHeader.Filename) {
-			return nil, errors.New("サムネイルは画像ファイル（PNG, JPEG, GIF, WebP）である必要があります")
-		}
-
-		// 古いサムネイルがあれば削除予定としてマーク
-		oldThumbnailPublicID := work.ThumbnailPublicID
-
-		// Cloudinaryにアップロード
-		thumbnailPublicID, thumbnailURL, err := s.cloudinaryService.UploadImage(
-			thumbnail,
-			utils.GenerateRandomString(8)+"_thumb_"+thumbnailHeader.Filename,
-			70)
-		if err != nil {
-			return nil, fmt.Errorf("サムネイルのアップロードに失敗しました: %v", err)
-		}
-
-		// 新しいURLを設定
-		work.ThumbnailURL = thumbnailURL
-		work.ThumbnailPublicID = thumbnailPublicID
-		work.ThumbnailType = getContentTypeFromFilename(thumbnailHeader.Filename)
-
-		// 古いサムネイルがあれば削除
-		if oldThumbnailPublicID != "" {
-			s.cloudinaryService.DeleteImage(oldThumbnailPublicID)
 		}
 	}
 
@@ -320,13 +261,6 @@ func (s *workService) Delete(id, userID uint) error {
 	// 権限チェック
 	if work.UserID != userID {
 		return errors.New("この作品を削除する権限がありません")
-	}
-
-	// Cloudinaryから画像を削除
-	if work.ThumbnailPublicID != "" {
-		if err := s.cloudinaryService.DeleteImage(work.ThumbnailPublicID); err != nil {
-			fmt.Printf("サムネイルの削除に失敗しました: %v\n", err)
-		}
 	}
 
 	// データベースから削除
@@ -420,43 +354,4 @@ func (s *workService) GetUserWorks(userID uint, page, limit int) ([]models.Work,
 	}
 
 	return works, total, pages, nil
-}
-
-// isImageFile ファイル名が画像ファイルかどうかを判定
-func isImageFile(filename string) bool {
-	ext := strings.ToLower(getFileExtension(filename))
-	for _, imgExt := range []string{".png", ".jpg", ".jpeg", ".gif", ".webp"} {
-		if ext == imgExt {
-			return true
-		}
-	}
-	return false
-}
-
-// getFileExtension ファイル名から拡張子を取得
-func getFileExtension(filename string) string {
-	parts := strings.Split(filename, ".")
-	if len(parts) < 2 {
-		return ""
-	}
-	return "." + parts[len(parts)-1]
-}
-
-// getContentTypeFromFilename ファイル名からContent-Typeを取得
-func getContentTypeFromFilename(filename string) string {
-	ext := strings.ToLower(getFileExtension(filename))
-	switch ext {
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".png":
-		return "image/png"
-	case ".gif":
-		return "image/gif"
-	case ".webp":
-		return "image/webp"
-	case ".pde":
-		return "text/plain"
-	default:
-		return "application/octet-stream"
-	}
 }

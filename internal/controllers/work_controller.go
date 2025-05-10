@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"mime/multipart"
 	"net/http"
 	"strconv"
 	"strings"
@@ -26,18 +25,20 @@ func NewWorkController(workService services.WorkService) *WorkController {
 
 // Create 新しい作品を作成
 func (c *WorkController) Create(ctx *gin.Context) {
-	// マルチパートフォームを解析
-	if err := ctx.Request.ParseMultipartForm(32 << 20); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "マルチパートフォームの解析に失敗しました"})
-		return
+	// JSONリクエストをバインド
+	var req struct {
+		Title        string   `json:"title" binding:"required"`
+		Description  string   `json:"description"`
+		PDEContent   string   `json:"pde_content" binding:"required"`
+		ThumbnailURL string   `json:"thumbnail_url"`
+		CodeShared   bool     `json:"code_shared"`
+		Tags         []string `json:"tags"`
 	}
 
-	// フォームデータを取得
-	title := ctx.PostForm("title")
-	description := ctx.PostForm("description")
-	pdeContent := ctx.PostForm("pde_content")
-	codeSharedStr := ctx.PostForm("code_shared")
-	tagsStr := ctx.PostForm("tags")
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	// ユーザー情報を取得
 	user, exists := ctx.Get("user")
@@ -47,40 +48,14 @@ func (c *WorkController) Create(ctx *gin.Context) {
 	}
 	u := user.(*models.User)
 
-	// タグを解析
-	var tags []string
-	if tagsStr != "" {
-		tags = strings.Split(tagsStr, ",")
-		for i, tag := range tags {
-			tags[i] = strings.TrimSpace(tag)
-		}
-	}
-
-	// boolean値を解析
-	codeShared := codeSharedStr == "true" || codeSharedStr == "1"
-
-	// サムネイル画像を取得
-	var thumbnail, _ = ctx.FormFile("thumbnail")
-	var thumbnailFile multipart.File
-	var err error
-	if thumbnail != nil {
-		thumbnailFile, err = thumbnail.Open()
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "サムネイル画像の読み込みに失敗しました"})
-			return
-		}
-		defer thumbnailFile.Close()
-	}
-
 	// 作品を作成
 	work, err := c.workService.Create(
-		title,
-		description,
-		pdeContent,
-		thumbnailFile,
-		thumbnail,
-		codeShared,
-		tags,
+		req.Title,
+		req.Description,
+		req.PDEContent,
+		req.ThumbnailURL,
+		req.CodeShared,
+		req.Tags,
 		u.ID,
 	)
 	if err != nil {
@@ -127,54 +102,31 @@ func (c *WorkController) Update(ctx *gin.Context) {
 	}
 	u := user.(*models.User)
 
-	// マルチパートフォームを解析
-	if err := ctx.Request.ParseMultipartForm(32 << 20); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "マルチパートフォームの解析に失敗しました"})
+	// JSONリクエストをバインド
+	var req struct {
+		Title        string   `json:"title"`
+		Description  string   `json:"description"`
+		PDEContent   string   `json:"pde_content"`
+		ThumbnailURL string   `json:"thumbnail_url"`
+		CodeShared   bool     `json:"code_shared"`
+		Tags         []string `json:"tags"`
+	}
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
-	}
-
-	// フォームデータを取得
-	title := ctx.PostForm("title")
-	description := ctx.PostForm("description")
-	pdeContent := ctx.PostForm("pde_content")
-	codeSharedStr := ctx.PostForm("code_shared")
-	tagsStr := ctx.PostForm("tags")
-
-	// タグを解析
-	var tags []string
-	if tagsStr != "" {
-		tags = strings.Split(tagsStr, ",")
-		for i, tag := range tags {
-			tags[i] = strings.TrimSpace(tag)
-		}
-	}
-
-	// boolean値を解析
-	codeShared := codeSharedStr == "true" || codeSharedStr == "1"
-
-	// サムネイル画像を取得
-	var thumbnail, _ = ctx.FormFile("thumbnail")
-	var thumbnailFile multipart.File
-	if thumbnail != nil {
-		thumbnailFile, err = thumbnail.Open()
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "サムネイル画像の読み込みに失敗しました"})
-			return
-		}
-		defer thumbnailFile.Close()
 	}
 
 	// 作品を更新
 	work, err := c.workService.Update(
 		uint(id),
 		u.ID,
-		title,
-		description,
-		pdeContent,
-		thumbnailFile,
-		thumbnail,
-		codeShared,
-		tags,
+		req.Title,
+		req.Description,
+		req.PDEContent,
+		req.ThumbnailURL,
+		req.CodeShared,
+		req.Tags,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "権限がありません") {
@@ -366,48 +318,9 @@ func (c *WorkController) RemoveLike(ctx *gin.Context) {
 }
 
 // GetUserWorks ユーザーの作品一覧を取得
-// func (c *WorkController) GetUserWorks(ctx *gin.Context) {
-// 	// ユーザーIDを解析
-// 	userID, err := strconv.ParseUint(ctx.Param("userID"), 10, 32)
-// 	if err != nil {
-// 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "無効なユーザーIDです"})
-// 		return
-// 	}
-
-// 	// クエリパラメータを取得
-// 	pageStr := ctx.DefaultQuery("page", "1")
-// 	limitStr := ctx.DefaultQuery("limit", "20")
-
-// 	// 数値パラメータを解析
-// 	page, err := strconv.Atoi(pageStr)
-// 	if err != nil || page < 1 {
-// 		page = 1
-// 	}
-
-// 	limit, err := strconv.Atoi(limitStr)
-// 	if err != nil || limit < 1 || limit > 100 {
-// 		limit = 20
-// 	}
-
-// 	// 作品一覧を取得
-// 	works, total, pages, err := c.workService.GetUserWorks(uint(userID), page, limit)
-// 	if err != nil {
-// 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-// 		return
-// 	}
-
-// 	ctx.JSON(http.StatusOK, gin.H{
-// 		"works": works,
-// 		"total": total,
-// 		"pages": pages,
-// 		"page":  page,
-// 	})
-// }
-
-// GetUserWorks ユーザーの作品一覧を取得
 func (c *WorkController) GetUserWorks(ctx *gin.Context) {
-	// ユーザーIDを解析：userIDからidに変更
-	userID, err := strconv.ParseUint(ctx.Param("id"), 10, 32) // 修正：userIDからidに変更
+	// ユーザーIDを解析
+	userID, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "無効なユーザーIDです"})
 		return

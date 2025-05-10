@@ -33,17 +33,14 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	voteRepo := repository.NewVoteRepository(db)
 
 	// Cloudinaryサービスを作成
-	cloudinaryService, err := services.NewCloudinaryService(cfg)
-	if err != nil {
-		panic("Cloudinaryサービスの初期化に失敗しました: " + err.Error())
-	}
+	// cloudinaryService, err := services.NewCloudinaryService(cfg)
 
 	// Lambdaサービスを作成
 	lambdaService := services.NewLambdaService(cfg)
 
 	// サービスを作成
 	authService := services.NewAuthService(userRepo, cfg)
-	workService := services.NewWorkService(workRepo, tagRepo, cloudinaryService, lambdaService)
+	workService := services.NewWorkService(workRepo, tagRepo, lambdaService)
 	tagService := services.NewTagService(tagRepo)
 	commentService := services.NewCommentService(commentRepo, workRepo)
 	userService := services.NewUserService(userRepo, workRepo)
