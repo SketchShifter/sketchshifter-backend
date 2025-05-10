@@ -117,7 +117,20 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 		}
 
 		// プロジェクトルート
-		projects := api.Group("/projects").Use(authMiddleware)
+		// projects := api.Group("/projects").Use(authMiddleware)
+		// {
+		// 	projects.GET("", projectController.List)
+		// 	projects.POST("", projectController.Create)
+		// 	projects.GET("/my", projectController.GetUserProjects)
+		// 	projects.POST("/join", projectController.JoinProject)
+		// 	projects.GET("/:id", projectController.GetByID)
+		// 	projects.PUT("/:id", projectController.Update)
+		// 	projects.DELETE("/:id", projectController.Delete)
+		// 	projects.GET("/:id/members", projectController.GetMembers)
+		// 	projects.DELETE("/:id/members/:memberID", projectController.RemoveMember)
+		// 	projects.POST("/:id/invitation-code", projectController.GenerateInvitationCode)
+		// }
+		projects := api.Group("/projects")
 		{
 			projects.GET("", projectController.List)
 			projects.POST("", projectController.Create)
@@ -132,7 +145,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 		}
 
 		// タスクルート
-		tasks := api.Group("/tasks").Use(authMiddleware)
+		tasks := api.Group("/tasks")
 		{
 			tasks.POST("", taskController.Create)
 			tasks.GET("/:id", taskController.GetByID)
@@ -144,6 +157,18 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 			tasks.GET("/:id/works", taskController.GetWorks)
 			tasks.PUT("/orders", taskController.UpdateOrders)
 		}
+		// tasks := api.Group("/tasks").Use(authMiddleware)
+		// {
+		// 	tasks.POST("", taskController.Create)
+		// 	tasks.GET("/:id", taskController.GetByID)
+		// 	tasks.PUT("/:id", taskController.Update)
+		// 	tasks.DELETE("/:id", taskController.Delete)
+		// 	tasks.GET("/project/:projectID", taskController.ListByProject)
+		// 	tasks.POST("/:id/works", taskController.AddWork)
+		// 	tasks.DELETE("/:id/works/:workID", taskController.RemoveWork)
+		// 	tasks.GET("/:id/works", taskController.GetWorks)
+		// 	tasks.PUT("/orders", taskController.UpdateOrders)
+		// }
 
 		// 投票ルート
 		votes := api.Group("/votes").Use(authMiddleware)

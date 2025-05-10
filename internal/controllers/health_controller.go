@@ -21,10 +21,11 @@ func NewHealthController() *HealthController {
 
 // HealthStatus ヘルスステータスレスポンス
 type HealthStatus struct {
-	Status    string `json:"status"`
-	Uptime    string `json:"uptime"`
-	Timestamp string `json:"timestamp"`
-	Version   string `json:"version"`
+	Status      string `json:"status"`
+	Uptime      string `json:"uptime"`
+	Timestamp   string `json:"timestamp"`
+	Version     string `json:"version"`
+	Description string `json:"description"`
 }
 
 // Check ヘルスチェック
@@ -34,10 +35,11 @@ func (c *HealthController) Check(ctx *gin.Context) {
 	timestamp := time.Now().Format(time.RFC3339)
 
 	healthStatus := &HealthStatus{
-		Status:    status,
-		Uptime:    uptime,
-		Timestamp: timestamp,
-		Version:   "1.0.0", // アプリケーションバージョン
+		Status:      status,
+		Uptime:      uptime,
+		Timestamp:   timestamp,
+		Version:     "1.0.0", // アプリケーションバージョン
+		Description: "Serendicode Sub",
 	}
 
 	ctx.JSON(http.StatusOK, healthStatus)
