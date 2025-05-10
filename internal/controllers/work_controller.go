@@ -366,9 +366,48 @@ func (c *WorkController) RemoveLike(ctx *gin.Context) {
 }
 
 // GetUserWorks ユーザーの作品一覧を取得
+// func (c *WorkController) GetUserWorks(ctx *gin.Context) {
+// 	// ユーザーIDを解析
+// 	userID, err := strconv.ParseUint(ctx.Param("userID"), 10, 32)
+// 	if err != nil {
+// 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "無効なユーザーIDです"})
+// 		return
+// 	}
+
+// 	// クエリパラメータを取得
+// 	pageStr := ctx.DefaultQuery("page", "1")
+// 	limitStr := ctx.DefaultQuery("limit", "20")
+
+// 	// 数値パラメータを解析
+// 	page, err := strconv.Atoi(pageStr)
+// 	if err != nil || page < 1 {
+// 		page = 1
+// 	}
+
+// 	limit, err := strconv.Atoi(limitStr)
+// 	if err != nil || limit < 1 || limit > 100 {
+// 		limit = 20
+// 	}
+
+// 	// 作品一覧を取得
+// 	works, total, pages, err := c.workService.GetUserWorks(uint(userID), page, limit)
+// 	if err != nil {
+// 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+// 		return
+// 	}
+
+// 	ctx.JSON(http.StatusOK, gin.H{
+// 		"works": works,
+// 		"total": total,
+// 		"pages": pages,
+// 		"page":  page,
+// 	})
+// }
+
+// GetUserWorks ユーザーの作品一覧を取得
 func (c *WorkController) GetUserWorks(ctx *gin.Context) {
-	// ユーザーIDを解析
-	userID, err := strconv.ParseUint(ctx.Param("userID"), 10, 32)
+	// ユーザーIDを解析：userIDからidに変更
+	userID, err := strconv.ParseUint(ctx.Param("id"), 10, 32) // 修正：userIDからidに変更
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "無効なユーザーIDです"})
 		return

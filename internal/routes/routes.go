@@ -1,6 +1,9 @@
 package routes
 
 import (
+	"log"
+	"net/http"
+
 	"github.com/SketchShifter/sketchshifter_backend/internal/config"
 	"github.com/SketchShifter/sketchshifter_backend/internal/controllers"
 	"github.com/SketchShifter/sketchshifter_backend/internal/middlewares"
@@ -110,31 +113,27 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 		// ユーザールート
 		users := api.Group("/users")
 		{
-			users.GET("/:id", userController.GetByID)
-			users.GET("/:userID/works", workController.GetUserWorks)
+			// 重要：順序に注意！まず静的なルートを定義
 			users.GET("/me", authMiddleware, userController.GetMe)
+
+			// 次に動的パラメータを含むルートを定義
+			users.GET("/:id", userController.GetByID)            // 修正：idパラメータに統一
+			users.GET("/:id/works", workController.GetUserWorks) // 修正：userIDからidに変更
+
+			// プロフィール更新
 			users.PUT("/profile", authMiddleware, userController.UpdateProfile)
 		}
 
 		// プロジェクトルート
-		// projects := api.Group("/projects").Use(authMiddleware)
-		// {
-		// 	projects.GET("", projectController.List)
-		// 	projects.POST("", projectController.Create)
-		// 	projects.GET("/my", projectController.GetUserProjects)
-		// 	projects.POST("/join", projectController.JoinProject)
-		// 	projects.GET("/:id", projectController.GetByID)
-		// 	projects.PUT("/:id", projectController.Update)
-		// 	projects.DELETE("/:id", projectController.Delete)
-		// 	projects.GET("/:id/members", projectController.GetMembers)
-		// 	projects.DELETE("/:id/members/:memberID", projectController.RemoveMember)
-		// 	projects.POST("/:id/invitation-code", projectController.GenerateInvitationCode)
-		// }
-		projects := api.Group("/projects")
+		projects := api.Group("/projects").Use(authMiddleware)
 		{
 			projects.GET("", projectController.List)
 			projects.POST("", projectController.Create)
-			projects.GET("/my", projectController.GetUserProjects)
+			// デバッグログを追加
+			projects.GET("/my", func(c *gin.Context) {
+				log.Printf("[DEBUG] /projects/my endpoint called - Method: %s, Path: %s", c.Request.Method, c.Request.URL.Path)
+				projectController.GetUserProjects(c)
+			})
 			projects.POST("/join", projectController.JoinProject)
 			projects.GET("/:id", projectController.GetByID)
 			projects.PUT("/:id", projectController.Update)
@@ -145,7 +144,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 		}
 
 		// タスクルート
-		tasks := api.Group("/tasks")
+		tasks := api.Group("/tasks").Use(authMiddleware)
 		{
 			tasks.POST("", taskController.Create)
 			tasks.GET("/:id", taskController.GetByID)
@@ -157,18 +156,6 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 			tasks.GET("/:id/works", taskController.GetWorks)
 			tasks.PUT("/orders", taskController.UpdateOrders)
 		}
-		// tasks := api.Group("/tasks").Use(authMiddleware)
-		// {
-		// 	tasks.POST("", taskController.Create)
-		// 	tasks.GET("/:id", taskController.GetByID)
-		// 	tasks.PUT("/:id", taskController.Update)
-		// 	tasks.DELETE("/:id", taskController.Delete)
-		// 	tasks.GET("/project/:projectID", taskController.ListByProject)
-		// 	tasks.POST("/:id/works", taskController.AddWork)
-		// 	tasks.DELETE("/:id/works/:workID", taskController.RemoveWork)
-		// 	tasks.GET("/:id/works", taskController.GetWorks)
-		// 	tasks.PUT("/orders", taskController.UpdateOrders)
-		// }
 
 		// 投票ルート
 		votes := api.Group("/votes").Use(authMiddleware)
@@ -185,6 +172,18 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 			votes.GET("/:id/user-votes", voteController.GetUserVotes)
 			votes.POST("/:id/close", voteController.CloseVote)
 		}
+
+		// デバッグルート（一時的）
+		api.GET("/debug/routes", func(c *gin.Context) {
+			routes := r.Routes()
+			for _, route := range routes {
+				log.Printf("Route: %s %s", route.Method, route.Path)
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"count":  len(routes),
+				"routes": routes,
+			})
+		})
 	}
 
 	return r
