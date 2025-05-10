@@ -40,7 +40,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 
 	// サービスを作成
 	authService := services.NewAuthService(userRepo, cfg)
-	workService := services.NewWorkService(workRepo, tagRepo, lambdaService)
+	workService := services.NewWorkService(workRepo, tagRepo, lambdaService, taskRepo, projectRepo) // taskRepo, projectRepoを追加
 	tagService := services.NewTagService(tagRepo)
 	commentService := services.NewCommentService(commentRepo, workRepo)
 	userService := services.NewUserService(userRepo, workRepo)

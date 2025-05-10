@@ -33,6 +33,7 @@ func (c *WorkController) Create(ctx *gin.Context) {
 		ThumbnailURL string   `json:"thumbnail_url"`
 		CodeShared   bool     `json:"code_shared"`
 		Tags         []string `json:"tags"`
+		TaskID       *uint    `json:"task_id"`
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -56,6 +57,7 @@ func (c *WorkController) Create(ctx *gin.Context) {
 		req.ThumbnailURL,
 		req.CodeShared,
 		req.Tags,
+		req.TaskID,
 		u.ID,
 	)
 	if err != nil {
@@ -110,6 +112,7 @@ func (c *WorkController) Update(ctx *gin.Context) {
 		ThumbnailURL string   `json:"thumbnail_url"`
 		CodeShared   bool     `json:"code_shared"`
 		Tags         []string `json:"tags"`
+		TaskID       *uint    `json:"task_id"`
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -127,6 +130,7 @@ func (c *WorkController) Update(ctx *gin.Context) {
 		req.ThumbnailURL,
 		req.CodeShared,
 		req.Tags,
+		req.TaskID,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "権限がありません") {

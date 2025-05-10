@@ -11,9 +11,9 @@ import (
 
 // WorkService 作品に関するサービスインターフェース
 type WorkService interface {
-	Create(title, description, pdeContent, thumbnailURL string, codeShared bool, tagNames []string, userID uint) (*models.Work, error)
+	Create(title, description, pdeContent, thumbnailURL string, codeShared bool, tagNames []string, taskID *uint, userID uint) (*models.Work, error)
 	GetByID(id uint) (*models.Work, error)
-	Update(id, userID uint, title, description, pdeContent, thumbnailURL string, codeShared bool, tagNames []string) (*models.Work, error)
+	Update(id, userID uint, title, description, pdeContent, thumbnailURL string, codeShared bool, tagNames []string, taskID *uint) (*models.Work, error)
 	Delete(id, userID uint) error
 	List(page, limit int, search, tag string, userID *uint, sort string) ([]models.Work, int64, int, error)
 	AddLike(userID, workID uint) (int, error)
@@ -27,18 +27,40 @@ type workService struct {
 	workRepo      repository.WorkRepository
 	tagRepo       repository.TagRepository
 	lambdaService LambdaService
+	taskRepo      repository.TaskRepository
+	projectRepo   repository.ProjectRepository
 }
 
 // NewWorkService WorkServiceを作成
 func NewWorkService(
 	workRepo repository.WorkRepository,
 	tagRepo repository.TagRepository,
-	lambdaService LambdaService) WorkService {
+	lambdaService LambdaService,
+	taskRepo repository.TaskRepository,
+	projectRepo repository.ProjectRepository) WorkService {
 	return &workService{
 		workRepo:      workRepo,
 		tagRepo:       tagRepo,
 		lambdaService: lambdaService,
+		taskRepo:      taskRepo,
+		projectRepo:   projectRepo,
 	}
+}
+
+// GetByID IDで作品を取得
+func (s *workService) GetByID(id uint) (*models.Work, error) {
+	work, err := s.workRepo.FindByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	// 閲覧数を増加
+	if err := s.workRepo.IncrementViews(id); err != nil {
+		// エラーでも続行
+		fmt.Printf("閲覧数の更新に失敗しました: %v\n", err)
+	}
+
+	return work, nil
 }
 
 // Create 新しい作品を作成
@@ -46,6 +68,7 @@ func (s *workService) Create(
 	title, description, pdeContent, thumbnailURL string,
 	codeShared bool,
 	tagNames []string,
+	taskID *uint,
 	userID uint) (*models.Work, error) {
 
 	// タイトルのバリデーション
@@ -56,6 +79,21 @@ func (s *workService) Create(
 	// PDEコードのバリデーション
 	if strings.TrimSpace(pdeContent) == "" {
 		return nil, errors.New("PDEコードは必須です")
+	}
+
+	// タスクIDが指定されている場合のバリデーションと権限チェック
+	if taskID != nil {
+		// タスクが存在するか確認
+		task, err := s.taskRepo.FindByID(*taskID)
+		if err != nil {
+			return nil, errors.New("指定されたタスクが見つかりません")
+		}
+
+		// ユーザーがプロジェクトのメンバーか確認
+		isMember, err := s.projectRepo.IsMember(task.ProjectID, userID)
+		if err != nil || !isMember {
+			return nil, errors.New("このタスクに作品を投稿する権限がありません")
+		}
 	}
 
 	// JavaScriptへの変換（Lambda関数を使用）
@@ -85,6 +123,15 @@ func (s *workService) Create(
 	// データベースに保存
 	if err := s.workRepo.Create(work); err != nil {
 		return nil, fmt.Errorf("作品の保存に失敗しました: %v", err)
+	}
+
+	// タスクに作品を関連付け
+	if taskID != nil {
+		if err := s.taskRepo.AddWork(*taskID, work.ID); err != nil {
+			// 作品を削除してエラーを返す
+			s.workRepo.Delete(work.ID)
+			return nil, fmt.Errorf("タスクへの作品の追加に失敗しました: %v", err)
+		}
 	}
 
 	// タグを処理
@@ -136,24 +183,8 @@ func (s *workService) Create(
 	return s.GetByID(work.ID)
 }
 
-// GetByID IDで作品を取得
-func (s *workService) GetByID(id uint) (*models.Work, error) {
-	work, err := s.workRepo.FindByID(id)
-	if err != nil {
-		return nil, err
-	}
-
-	// 閲覧数を増加
-	if err := s.workRepo.IncrementViews(id); err != nil {
-		// エラーでも続行
-		fmt.Printf("閲覧数の更新に失敗しました: %v\n", err)
-	}
-
-	return work, nil
-}
-
 // Update 作品を更新
-func (s *workService) Update(id, userID uint, title, description, pdeContent, thumbnailURL string, codeShared bool, tagNames []string) (*models.Work, error) {
+func (s *workService) Update(id, userID uint, title, description, pdeContent, thumbnailURL string, codeShared bool, tagNames []string, taskID *uint) (*models.Work, error) {
 	// 作品を取得
 	work, err := s.workRepo.FindByID(id)
 	if err != nil {
@@ -163,6 +194,36 @@ func (s *workService) Update(id, userID uint, title, description, pdeContent, th
 	// 権限チェック
 	if work.UserID != userID {
 		return nil, errors.New("この作品を更新する権限がありません")
+	}
+
+	// タスクIDが変更される場合の処理
+	if taskID != nil {
+		// 新しいタスクが存在するか確認
+		task, err := s.taskRepo.FindByID(*taskID)
+		if err != nil {
+			return nil, errors.New("指定されたタスクが見つかりません")
+		}
+
+		// ユーザーがプロジェクトのメンバーか確認
+		isMember, err := s.projectRepo.IsMember(task.ProjectID, userID)
+		if err != nil || !isMember {
+			return nil, errors.New("このタスクに作品を移動する権限がありません")
+		}
+
+		// 現在のタスクとの関連を削除（もしあれば）
+		// 現在関連付けられているタスクを取得
+		currentTasks, _, err := s.taskRepo.GetWorks(0, 1, 1) // TODO: 作品に関連するタスク一覧を取得する機能が必要
+		if err == nil {
+			for _, currentTask := range currentTasks {
+				// 作品が含まれているタスクから削除
+				s.taskRepo.RemoveWork(currentTask.ID, work.ID)
+			}
+		}
+
+		// 新しいタスクに作品を追加
+		if err := s.taskRepo.AddWork(*taskID, work.ID); err != nil {
+			return nil, fmt.Errorf("タスクへの作品の移動に失敗しました: %v", err)
+		}
 	}
 
 	// タイトルのバリデーション
