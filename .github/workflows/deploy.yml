@@ -19,16 +19,20 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: '1.18'
-          cache: false
+          cache: false  # Goキャッシュを無効化
         
       - name: Install dependencies
         run: |
+          go clean -modcache  # モジュールキャッシュをクリア
           go mod download
           go mod tidy
       
       - name: Build application
         run: |
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o app ./cmd/app/main.go
+          # 既存のバイナリを削除（あれば）
+          rm -f app
+          # 強制的に再ビルド
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -ldflags="-w -s" -o app ./cmd/app/main.go
           
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -103,6 +107,18 @@ jobs:
           chmod 755 "$APP_DIR/uploads"
           cd "$APP_DIR"
           
+          # 既存のコンテナとイメージを停止・削除
+          echo "Stopping existing containers..."
+          docker-compose down || echo "No containers to stop"
+          
+          # 古いDockerイメージを削除
+          echo "Removing old Docker images..."
+          docker rmi -f $(docker images -q sketchshifter_backend-api 2>/dev/null) || echo "No old images to remove"
+          
+          # Dockerのビルドキャッシュもクリア
+          echo "Cleaning Docker build cache..."
+          docker system prune -a -f || echo "Cache already clean"
+          
           # アプリケーションファイルのダウンロード
           echo "Downloading application files from S3..."
           aws s3 cp "s3://$S3_BUCKET/deploy/app" app || { echo "Failed to download app"; exit 1; }
@@ -122,12 +138,9 @@ jobs:
           echo "Checking Docker status..."
           docker info || { echo "Docker not running or not accessible"; exit 1; }
           
-          # 既存コンテナの停止
-          echo "Stopping existing containers..."
-          docker-compose down || echo "No containers to stop"
-          
-          # 新コンテナの起動
-          echo "Starting new containers..."
+          # キャッシュなしで新コンテナをビルド・起動
+          echo "Building and starting new containers (without cache)..."
+          docker-compose build --no-cache || { echo "Failed to build containers"; exit 1; }
           docker-compose up -d || { echo "Failed to start containers"; exit 1; }
           
           # 起動確認
